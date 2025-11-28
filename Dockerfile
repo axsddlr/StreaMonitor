@@ -5,7 +5,7 @@ FROM python:3.12-alpine3.19
 ENV PYCURL_SSL_LIBRARY=openssl
 
 # Install dependencies
-RUN apk add --no-cache ffmpeg libcurl
+RUN apk add --no-cache ffmpeg libcurl curl
 
 WORKDIR /app
 
@@ -20,5 +20,6 @@ COPY *.py ./
 COPY streamonitor ./streamonitor
 
 EXPOSE 5000
+HEALTHCHECK CMD curl -f http://localhost:5000/ || exit 1
 CMD [ "python3", "Downloader.py"]
 
