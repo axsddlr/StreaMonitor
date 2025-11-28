@@ -44,8 +44,13 @@ def loadStreamers():
             logger.warning(f'Unknown site: {site} (user: {username})')
             continue
 
-        streamer_bot = bot_class.fromConfig(streamer)
-        streamers.append(streamer_bot)
-        streamer_bot.start()
-        time.sleep(0.1)
+        try:
+            streamer_bot = bot_class.fromConfig(streamer)
+            streamers.append(streamer_bot)
+            streamer_bot.start()
+            time.sleep(0.1)
+        except Exception as e:
+            logger.error(f'Failed to initialize {username} on {site}: {e}')
+            logger.warning(f'Skipping {username} on {site}')
+            continue
     return streamers

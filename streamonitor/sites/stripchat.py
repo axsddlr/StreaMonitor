@@ -51,7 +51,36 @@ class StripChat(Bot):
             raise Exception("Failed to fetch main.js from StripChat")
         StripChat._main_js_data = r.content.decode('utf-8')
 
-        doppio_js_name = re.findall('require[(]"./(Doppio.*?[.]js)"[)]', StripChat._main_js_data)[0]
+        # Try multiple patterns to find the Doppio.js file
+        patterns = [
+            r'require\(["\']\./(Doppio[^"\']+\.js)["\']\)',  # Original pattern
+            r'import\(["\']\./(Doppio[^"\']+\.js)["\']\)',   # ES6 import
+            r'["\']\./(Doppio[^"\']+\.js)["\']',             # Generic string match
+            r'(Doppio[^"\']+\.js)',                          # Just filename
+        ]
+
+        doppio_js_matches = []
+        for pattern in patterns:
+            doppio_js_matches = re.findall(pattern, StripChat._main_js_data)
+            if doppio_js_matches:
+                break
+
+        if not doppio_js_matches:
+            # Save main.js for debugging
+            import os
+            debug_path = '/tmp/stripchat_main.js' if os.name != 'nt' else 'stripchat_main.js'
+            try:
+                with open(debug_path, 'w', encoding='utf-8') as f:
+                    f.write(StripChat._main_js_data[:5000])  # First 5000 chars
+            except Exception:
+                pass
+
+            raise Exception(
+                "Failed to parse Doppio.js filename from StripChat main.js. "
+                "The site structure may have changed. Please check for updates or report this issue. "
+                f"Debug: Saved first 5000 chars to {debug_path}"
+            )
+        doppio_js_name = doppio_js_matches[0]
 
         r = requests.get(f"{mmp_base}/{doppio_js_name}", headers=cls.headers)
         if r.status_code != 200:
