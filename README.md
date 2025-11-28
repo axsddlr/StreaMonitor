@@ -1,9 +1,49 @@
-# StreaMonitor
-A Python3 application for monitoring and saving (mostly adult) live streams from various websites.
+<div align="center">
+
+![StreaMonitor](./logo.svg)
+
+**A Python3 application for monitoring and saving (mostly adult) live streams from various websites.**
+
+[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://hub.docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-axsddlr/StreaMonitor-181717.svg?logo=github)](https://github.com/axsddlr/StreaMonitor)
 
 Inspired by [Recordurbate](https://github.com/oliverjrose99/Recordurbate)
 
-## Supported sites
+</div>
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Supported Sites](#supported-sites)
+- [Quick Start](#quick-start)
+- [Requirements](#requirements)
+- [Usage](#usage)
+  - [Console Commands](#starting-and-console)
+  - [Remote Controller](#remote-controller)
+  - [Web Interface](#web-interface)
+- [Docker Support](#docker-support)
+- [Configuration](#configuration)
+- [Disclaimer](#disclaimer)
+
+---
+
+## Features
+
+✅ **Multi-Platform Support** - 13+ streaming platforms (Chaturbate, StripChat, BongaCams, and more)
+✅ **Web Dashboard** - Modern web interface for easy management
+✅ **Docker Ready** - Pre-configured Docker & docker-compose setup
+✅ **Resolution Selection** - Choose your preferred video quality
+✅ **Auto-Recording** - Automatically starts recording when streamers go live
+✅ **Multiple Interfaces** - CLI, Web UI, and ZeroMQ remote control
+✅ **FFmpeg Powered** - Reliable video recording and processing
+
+---
+
+## Supported Sites
 | Site name     | Abbreviation | Aliases                     | Quirks                 | Selectable resolution |
 |---------------|--------------|-----------------------------|------------------------|-----------------------|
 | Bongacams     | `BC`         |                             |                        | Yes                   |
@@ -31,10 +71,55 @@ Currently not supported:
 
 There are hundreds of clones of the sites above, you can read about them on [this site](https://adultwebcam.site/clone-sites-by-platform/).
 
+## Quick Start
+
+### With Docker (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/axsddlr/StreaMonitor.git
+cd StreaMonitor
+
+# Start with docker-compose
+docker-compose up -d
+
+# Access web interface at http://localhost:5000
+```
+
+### Without Docker
+```bash
+# Clone the repository
+git clone https://github.com/axsddlr/StreaMonitor.git
+cd StreaMonitor
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the application
+python3 Downloader.py
+
+# Access web interface at http://localhost:5000
+```
+
 ## Requirements
-* Python 3
-  * Install packages listed in requirements.txt with pip.
-* FFmpeg
+
+### System Requirements
+- **Python 3.12+** (Python 3.8+ may work but not tested)
+- **FFmpeg** - Must be installed and available in PATH
+- **5GB+ disk space** - For recordings
+
+### Python Dependencies
+All dependencies are listed in [requirements.txt](requirements.txt):
+- Flask (Web interface)
+- requests (HTTP client)
+- BeautifulSoup4 (HTML parsing)
+- FFmpy (FFmpeg wrapper)
+- m3u8 (HLS playlist parser)
+- And more...
+
+Install with:
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
@@ -90,10 +175,44 @@ You can access the web interface on port 5000.
 If set password in parameters.py username is admin, password admin, empty password is also allowed.
 When you set the WEBSERVER_HOST it is also accesible to from other computers in the network
 
-## Docker support
+## Docker Support
 
-You can run this application in docker. I prefer docker-compose so I included an example docker-compose.yml file that you can use.
-Simply start it in the folder with `docker-compose up`.
+### Quick Start with Docker
+
+**Pull from GitHub Container Registry:**
+```bash
+docker pull ghcr.io/axsddlr/streamonitor:latest
+```
+
+**Run with docker-compose** (Recommended):
+```bash
+docker-compose up -d
+```
+
+**Run with Docker:**
+```bash
+docker run -d \
+  -p 5000:5000 \
+  -v $(pwd)/downloads:/app/downloads \
+  -v $(pwd)/config.json:/app/config.json \
+  -e STRMNTR_HOST=0.0.0.0 \
+  ghcr.io/axsddlr/streamonitor:latest
+```
+
+The web interface will be available at `http://localhost:5000`
+
+### Environment Variables
+
+Configure via environment variables (see [parameters.py](parameters.py) for all options):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STRMNTR_HOST` | `127.0.0.1` | Web server bind address (use `0.0.0.0` for remote access) |
+| `STRMNTR_PORT` | `5000` | Web server port |
+| `STRMNTR_PASSWORD` | `admin` | Web interface password (username: admin) |
+| `STRMNTR_RESOLUTION` | `1080` | Preferred video resolution |
+| `STRMNTR_CONTAINER` | `mp4` | Output container format |
+| `STRMNTR_SKIN` | `truck-kun` | Web UI theme (truck-kun, shaftoverflow, kseen715) |
 
 ## Configuration
 
@@ -101,8 +220,33 @@ You can set some parameters in the [parameters.py](parameters.py).
 
 ## Disclaimer
 
-This program is only a proof of concept and education project, I don't encourage anybody to use it. \
-Most (if not every) streamers disallow recording their shows. Please respect their wish. \
-If you don't, and you record them despite this request, please don't ever publish or share any recordings. \
-If you either record or share the recorded shows, you might be legally punished. \
-Also, please don't use this tool for monetization in any way.
+> [!WARNING]
+> **Educational and Proof of Concept Only**
+>
+> This program is a proof of concept and educational project. The author does not encourage its use for any purpose.
+>
+> **Important Legal and Ethical Considerations:**
+> - Most (if not all) streaming platforms prohibit recording content without permission
+> - Respect content creators' wishes and platform terms of service
+> - **Do not publish, share, or distribute** any recordings made with this tool
+> - Recording or sharing content without permission may result in **legal consequences**
+> - **Do not use this tool for commercial purposes or monetization**
+> - You are solely responsible for your use of this software
+>
+> By using this software, you acknowledge that you understand and accept these terms and take full responsibility for your actions.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Acknowledgments
+
+- Inspired by [Recordurbate](https://github.com/oliverjrose99/Recordurbate)
+- Built with Python, Flask, and FFmpeg
+- Community contributors and testers
