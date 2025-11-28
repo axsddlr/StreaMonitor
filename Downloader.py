@@ -10,11 +10,19 @@ import streamonitor.sites  # must have
 
         
 def is_docker():
+    """Check if the application is running inside a Docker container."""
+    if os.path.exists('/.dockerenv'):
+        return True
+
     path = '/proc/self/cgroup'
-    return (
-        os.path.exists('/.dockerenv') or
-        os.path.isfile(path) and any('docker' in line for line in open(path))
-    )
+    if os.path.isfile(path):
+        try:
+            with open(path, 'r') as f:
+                return any('docker' in line for line in f)
+        except (IOError, OSError):
+            pass
+
+    return False
 
 
 def main():
