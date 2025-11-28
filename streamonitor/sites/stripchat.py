@@ -36,14 +36,71 @@ class StripChat(Bot):
         self.getVideo = lambda _, url, filename: getVideoNativeHLS(self, url, filename, StripChat.m3u_decoder)
 
     @classmethod
-    def getInitialData(cls):
-        r = requests.get('https://hu.stripchat.com/api/front/v3/config/static', headers=cls.headers)
-        if r.status_code != 200:
-            raise Exception("Failed to fetch static data from StripChat")
-        StripChat._static_data = r.json().get('static')
+    @classmethod
+    def _fetch_static_config(cls):
+        """Fetch static config trying multiple endpoints (main + regional)."""
+        endpoints = [
+            'https://hu.stripchat.com/api/front/v3/config/static',
+            'https://stripchat.com/api/front/v3/config/static',
+        ]
+        last_status = None
+        last_error = None
+        for endpoint in endpoints:
+            try:
+                r = requests.get(endpoint, headers=cls.headers, timeout=10)
+            except Exception as exc:
+                last_error = exc
+                continue
+            last_status = r.status_code
+            if r.status_code == 200:
+                data = r.json().get('static')
+                if data:
+                    return data
+        if last_error:
+            raise Exception(f"Failed to fetch static data from StripChat (last error: {last_error})")
+        raise Exception(f"Failed to fetch static data from StripChat (last status: {last_status})")
 
-        mmp_origin = StripChat._static_data['features']['MMPExternalSourceOrigin']
-        mmp_version = StripChat._static_data['featuresV2']['playerModuleExternalLoading']['mmpVersion']
+    @classmethod
+    def _extract_doppio_name(cls, main_js_text):
+        """Find the Doppio bundle name in main.js using several patterns."""
+        patterns = [
+            r'require\(["\']\.\/(Doppio[^"\']+\.js)["\']\)',
+            r'import\(["\']\.\/(Doppio[^"\']+\.js)["\']\)',
+            r'["\'](?:\.\/)?(Doppio[^"\']+\.js)["\']',
+            r'https?://[^"\']*(Doppio[^"\']+\.js)',
+            r'(Doppio[^"\']+\.js)',
+        ]
+        for pattern in patterns:
+            matches = re.findall(pattern, main_js_text)
+            if matches:
+                # Some regexes may return tuples; pick the first non-empty piece
+                match = matches[0]
+                if isinstance(match, tuple):
+                    for item in match:
+                        if item:
+                            return item
+                else:
+                    return match
+
+        # Newer bundles use dynamic chunk names like chunk-Doppio-<hash>.js
+        chunk_id_match = re.search(r'(\d+):"Doppio"', main_js_text)
+        if chunk_id_match:
+            chunk_id = chunk_id_match.group(1)
+            hash_match = re.search(rf'{chunk_id}:"([0-9a-fA-F]+)"', main_js_text)
+            if hash_match:
+                return f"chunk-Doppio-{hash_match.group(1)}.js"
+
+        return None
+
+    @classmethod
+    def getInitialData(cls):
+        StripChat._static_data = cls._fetch_static_config()
+
+        try:
+            mmp_origin = StripChat._static_data['features']['MMPExternalSourceOrigin']
+            mmp_version = StripChat._static_data['featuresV2']['playerModuleExternalLoading']['mmpVersion']
+        except KeyError as exc:
+            raise Exception("StripChat static config missing player module info") from exc
         mmp_base = f"{mmp_origin}/v{mmp_version}"
 
         r = requests.get(f"{mmp_base}/main.js", headers=cls.headers)
@@ -51,21 +108,8 @@ class StripChat(Bot):
             raise Exception("Failed to fetch main.js from StripChat")
         StripChat._main_js_data = r.content.decode('utf-8')
 
-        # Try multiple patterns to find the Doppio.js file
-        patterns = [
-            r'require\(["\']\./(Doppio[^"\']+\.js)["\']\)',  # Original pattern
-            r'import\(["\']\./(Doppio[^"\']+\.js)["\']\)',   # ES6 import
-            r'["\']\./(Doppio[^"\']+\.js)["\']',             # Generic string match
-            r'(Doppio[^"\']+\.js)',                          # Just filename
-        ]
-
-        doppio_js_matches = []
-        for pattern in patterns:
-            doppio_js_matches = re.findall(pattern, StripChat._main_js_data)
-            if doppio_js_matches:
-                break
-
-        if not doppio_js_matches:
+        doppio_js_name = cls._extract_doppio_name(StripChat._main_js_data)
+        if not doppio_js_name:
             # Save main.js for debugging
             import os
             debug_path = '/tmp/stripchat_main.js' if os.name != 'nt' else 'stripchat_main.js'
@@ -80,9 +124,11 @@ class StripChat(Bot):
                 "The site structure may have changed. Please check for updates or report this issue. "
                 f"Debug: Saved first 5000 chars to {debug_path}"
             )
-        doppio_js_name = doppio_js_matches[0]
 
-        r = requests.get(f"{mmp_base}/{doppio_js_name}", headers=cls.headers)
+        doppio_js_name = doppio_js_name.lstrip('./')
+        doppio_url = doppio_js_name if doppio_js_name.startswith('http') else f"{mmp_base}/{doppio_js_name}"
+
+        r = requests.get(doppio_url, headers=cls.headers)
         if r.status_code != 200:
             raise Exception("Failed to fetch doppio.js from StripChat")
         StripChat._doppio_js_data = r.content.decode('utf-8')
