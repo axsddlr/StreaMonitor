@@ -1,6 +1,5 @@
 import json
 import sys
-import time
 
 from streamonitor.bot import Bot
 from streamonitor.log import Logger
@@ -34,7 +33,14 @@ def save_config(config):
 
 
 def loadStreamers():
+    """Load and start all configured streamers.
+
+    Creates bot instances first, then starts them all in parallel for faster startup.
+    Each bot thread will handle its own initialization and timing.
+    """
     streamers = []
+
+    # First pass: Create all bot instances
     for streamer in load_config():
         username = streamer["username"]
         site = streamer["site"]
@@ -47,10 +53,17 @@ def loadStreamers():
         try:
             streamer_bot = bot_class.fromConfig(streamer)
             streamers.append(streamer_bot)
-            streamer_bot.start()
-            time.sleep(0.1)
         except Exception as e:
             logger.error(f'Failed to initialize {username} on {site}: {e}')
             logger.warning(f'Skipping {username} on {site}')
             continue
+
+    # Second pass: Start all threads in parallel
+    logger.info(f'Starting {len(streamers)} streamer(s)...')
+    for streamer_bot in streamers:
+        try:
+            streamer_bot.start()
+        except Exception as e:
+            logger.error(f'Failed to start thread for {streamer_bot.username}: {e}')
+
     return streamers
