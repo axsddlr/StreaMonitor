@@ -4,7 +4,7 @@ import traceback
 import m3u8
 from time import sleep
 from datetime import datetime
-from threading import Thread
+from threading import Thread, Lock
 
 import requests
 import requests.cookies
@@ -74,6 +74,7 @@ class Bot(Thread):
         self.getVideo = getVideoFfmpeg
         self.stopDownload = None
         self.recording = False
+        self._video_files_lock = Lock()
         self.video_files = []
         self.video_files_total_size = 0
         self.cache_file_list()
@@ -126,6 +127,7 @@ class Bot(Thread):
         return "javascript:void(0)"
 
     def cache_file_list(self):
+        """Scan directory and cache video file list with thread safety."""
         videos_folder = self.outputFolder
         _videos = []
         _total_size = 0
@@ -141,8 +143,20 @@ class Bot(Thread):
                     _videos.append(video)
             except Exception as e:
                 self.logger.warning(e)
-        self.video_files = _videos
-        self.video_files_total_size = _total_size
+
+        # Update shared state with lock to prevent race conditions
+        with self._video_files_lock:
+            self.video_files = _videos
+            self.video_files_total_size = _total_size
+
+    def get_video_files_safe(self):
+        """Thread-safe method to get video files list and total size.
+
+        Returns:
+            tuple: (video_files copy, total_size)
+        """
+        with self._video_files_lock:
+            return list(self.video_files), self.video_files_total_size
 
     def _sleep(self, time):
         while time > 0:

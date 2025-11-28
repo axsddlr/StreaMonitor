@@ -17,7 +17,11 @@ def get_streamer_context(streamer: Bot, sort_by_size: bool, play_video: str, use
     videos: Dict[str, VideoData] = {}
     has_error = False
     recordings_error_message = None
-    for video in streamer.video_files:
+
+    # Thread-safe access to video files and total size
+    video_files, total_size = streamer.get_video_files_safe()
+
+    for video in video_files:
         videos[video.filename] = video
     if sort_by_size:
         videos = dict(sorted(videos.items(), key=lambda item: item[1].filesize, reverse=True))
@@ -30,7 +34,7 @@ def get_streamer_context(streamer: Bot, sort_by_size: bool, play_video: str, use
         'video_to_play': videos.get(play_video),
         'refresh_freq': WEB_STATUS_FREQUENCY,
         'videos': videos,
-        'total_size': streamer.video_files_total_size,
+        'total_size': total_size,
         'has_error': has_error,
         'recordings_error_message': recordings_error_message,
         'theater_mode': WEB_THEATER_MODE,

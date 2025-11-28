@@ -23,7 +23,9 @@ def filter_streamers(streamer: Bot, username_filter: Union[str, None], site_filt
 def sort_streamers(sort_by):
     def _real_sort_streamers(item):
         if sort_by == 'video_files_count':
-            return len(item.video_files)
+            # Thread-safe access to video files count
+            video_files, _ = item.get_video_files_safe()
+            return len(video_files)
         elif sort_by == 'status':
             return item.sc.value
         return getattr(item, sort_by)
