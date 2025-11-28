@@ -26,7 +26,7 @@ from .utils import confirm_deletes, streamer_list, get_recording_query_params, g
 class HTTPManager(Manager):
     def __init__(self, streamers):
         super().__init__(streamers)
-        self.logger = log.Logger("manager")
+        self.logger = log.get_logger("manager")
         self.loaded_site_names = [site.site for site in LOADED_SITES]
         self.loaded_site_names.sort()
 

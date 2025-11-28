@@ -87,9 +87,7 @@ class Bot(Thread):
         self.url = self.getWebsiteURL()
 
     def getLogger(self):
-        if hasattr(self, 'logger') and self.logger:
-            self.logger.removeHandler(self.logger.handlers[0])
-        return log.Logger("[" + self.siteslug + "] " + self.username).get_logger()
+        return log.get_logger(f"[{self.siteslug}] {self.username}")
 
     def restart(self):
         self.running = True
@@ -270,7 +268,7 @@ class Bot(Thread):
             })
 
         if not variant_m3u8.is_variant and len(sources) >= 1:
-            self.logger.warn("Not variant playlist, can't select resolution")
+            self.logger.warning("Not variant playlist, can't select resolution")
             return None
         return sources  # [(url, (width, height)),...]
 

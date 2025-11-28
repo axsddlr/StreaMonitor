@@ -1,10 +1,11 @@
 import mimetypes
 import os
-import logging
 import re
 
+import streamonitor.log as log
 
-logger = logging.getLogger(__name__)
+
+logger = log.get_logger(__name__)
 
 
 class VideoData:

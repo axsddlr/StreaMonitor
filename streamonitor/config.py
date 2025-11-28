@@ -2,9 +2,9 @@ import json
 import sys
 
 from streamonitor.bot import Bot
-from streamonitor.log import Logger
+from streamonitor.log import get_logger
 
-logger = Logger('[CONFIG]').get_logger()
+logger = get_logger('[CONFIG]')
 config_loc = "config.json"
 
 

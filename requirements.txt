@@ -11,3 +11,4 @@ fake-useragent
 python-environ
 pycurl
 pycurl-requests
+loguru

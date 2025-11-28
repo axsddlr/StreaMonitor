@@ -14,7 +14,7 @@ class OOSDetector(Thread):
         super().__init__()
         self.streamers = streamers
         self.daemon = True
-        self.logger = log.Logger("out_of_space_detector")
+        self.logger = log.get_logger("out_of_space_detector")
 
     @staticmethod
     def free_space():

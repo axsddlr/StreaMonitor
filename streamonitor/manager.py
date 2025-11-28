@@ -1,5 +1,4 @@
 import math
-from logging import INFO, WARN, ERROR
 from threading import Thread
 from termcolor import colored
 import terminaltables.terminal_io
@@ -17,7 +16,7 @@ class Manager(Thread):
         super().__init__()
         self.daemon = True
         self.streamers = streamers
-        self.logger = log.Logger("manager")
+        self.logger = log.get_logger("manager")
 
     def execCmd(self, line):
         parts = str(line).split(' ')
@@ -73,7 +72,6 @@ class Manager(Thread):
             return "Streamer not found"
         try:
             streamer.stop(None, None)
-            streamer.logger.handlers = []
             self.streamers.remove(streamer)
             self.saveConfig()
             return "OK"

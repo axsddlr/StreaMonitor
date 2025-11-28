@@ -30,5 +30,5 @@ class DreamCam(Bot):
             return Status.PRIVATE
         if self.lastInfo["broadcastStatus"] in ["away", "offline"]:
             return Status.OFFLINE
-        self.logger.warn(f'Got unknown status: {self.lastInfo["broadcastStatus"]}')
+        self.logger.warning(f'Got unknown status: {self.lastInfo["broadcastStatus"]}')
         return Status.UNKNOWN

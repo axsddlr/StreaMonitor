@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from streamonitor.managers.httpmanager.models import StreamerContext
 
 
-_logger = log.Logger("utils")
+_logger = log.get_logger("utils")
     
 
 def get_streamer_context(streamer: Bot, sort_by_size: bool, play_video: str, user_agent: str) -> StreamerContext:

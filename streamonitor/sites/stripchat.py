@@ -186,7 +186,7 @@ class StripChat(Bot):
                 error = data['error']
                 if error == 'Not Found':
                     return Status.NOTEXIST
-                self.logger.warn(f'Status returned error: {error}')
+                self.logger.warning(f'Status returned error: {error}')
             return Status.UNKNOWN
 
         self.lastInfo = {'model': data['user']['user']}
@@ -204,5 +204,5 @@ class StripChat(Bot):
             return Status.NOTEXIST
         if data['user'].get('isGeoBanned') is True:
             return Status.RESTRICTED
-        self.logger.warn(f'Got unknown status: {status}')
+        self.logger.warning(f'Got unknown status: {status}')
         return Status.UNKNOWN

@@ -10,7 +10,7 @@ if sys.platform != "win32":
 class CLIManager(Manager):
     def __init__(self, streamers):
         super().__init__(streamers)
-        self.logger = log.Logger("manager_cli")
+        self.logger = log.get_logger("manager_cli")
 
     def run(self):
         while True:

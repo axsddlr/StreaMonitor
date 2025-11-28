@@ -1,35 +1,33 @@
-import logging
+import sys
+
+from loguru import logger as _logger
+
 import parameters
 
+_LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} - {level} - {extra[name]}: {message}"
+_LOG_LEVEL = "DEBUG" if parameters.DEBUG else "INFO"
 
-class Logger(object):
+# Configure a single stdout sink for the whole app
+_logger.remove()
+_logger.add(sys.stdout, format=_LOG_FORMAT, level=_LOG_LEVEL, enqueue=True)
+
+
+def get_logger(name="__name__"):
+    """Return a Loguru logger bound with a component name."""
+    return _logger.bind(name=name)
+
+
+class Logger:
+    """Compatibility wrapper so existing code can use Logger()."""
+
     def __init__(self, name="__name__"):
-        self.name = name
-        self.formatter = logging.Formatter('%(asctime)s - %(levelname)s - {}: %(message)s'.format(name))
-        self.handler = logging.StreamHandler()
-        self.handler.setFormatter(self.formatter)
-
-        self.logger = logging.getLogger(self.name)
-        loglevel = logging.DEBUG if parameters.DEBUG else logging.INFO
-        self.logger.setLevel(loglevel)
-
-        # Only add handler if not already present
-        if not self.logger.handlers:
-            self.logger.addHandler(self.handler)
+        self.logger = get_logger(name)
 
     def get_logger(self):
-        """Get the logger instance. Handler is already attached in __init__."""
-        self.logger.setLevel(logging.DEBUG)
         return self.logger
 
-    def debug(self, msg):
-        self.logger.debug(msg)
+    def __getattr__(self, item):
+        return getattr(self.logger, item)
 
-    def warning(self, msg):
+    def warn(self, msg):
         self.logger.warning(msg)
-
-    def error(self, msg):
-        self.logger.error(msg)
-
-    def info(self, msg):
-        self.logger.info(msg)
