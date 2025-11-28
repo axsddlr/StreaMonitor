@@ -45,8 +45,8 @@ def getVideoWSSVR(self, url, filename):
                                         debug_('Server is not ready or there was a change')
                                         error = True
                                         return
-                            except (json.JSONDecodeError, KeyError) as e:
-                                debug_(f'Failed to open the connection: {e}')
+                            except:
+                                debug_('Failed to open the connection')
                                 error = True
                                 return
 
