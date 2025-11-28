@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Dict, TYPE_CHECKING
 
 import streamonitor.log as log

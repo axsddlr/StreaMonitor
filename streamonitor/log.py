@@ -12,13 +12,15 @@ class Logger(object):
         self.logger = logging.getLogger(self.name)
         loglevel = logging.DEBUG if parameters.DEBUG else logging.INFO
         self.logger.setLevel(loglevel)
-        self.logger.addHandler(self.handler)
+
+        # Only add handler if not already present
+        if not self.logger.handlers:
+            self.logger.addHandler(self.handler)
 
     def get_logger(self):
-        logger = logging.getLogger(self.name)
-        logger.setLevel(logging.DEBUG)
-        logger.addHandler(self.handler)
-        return logger
+        """Get the logger instance. Handler is already attached in __init__."""
+        self.logger.setLevel(logging.DEBUG)
+        return self.logger
 
     def debug(self, msg):
         self.logger.debug(msg)
