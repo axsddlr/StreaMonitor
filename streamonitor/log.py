@@ -12,12 +12,14 @@ class Logger(object):
         self.logger = logging.getLogger(self.name)
         loglevel = logging.DEBUG if parameters.DEBUG else logging.INFO
         self.logger.setLevel(loglevel)
-        self.logger.addHandler(self.handler)
+        if not self.logger.handlers:
+            self.logger.addHandler(self.handler)
 
     def get_logger(self):
         logger = logging.getLogger(self.name)
         logger.setLevel(logging.DEBUG)
-        logger.addHandler(self.handler)
+        if not logger.handlers:
+            logger.addHandler(self.handler)
         return logger
 
     def debug(self, msg):
@@ -31,3 +33,8 @@ class Logger(object):
 
     def info(self, msg):
         self.logger.info(msg)
+
+
+def get_logger(name="__name__"):
+    """Compatibility helper used by modules expecting get_logger."""
+    return Logger(name).get_logger()
