@@ -28,9 +28,11 @@ RUN pip3 install -r requirements.txt
 
 COPY *.py ./
 COPY streamonitor ./streamonitor
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
 # Copy built frontend into the Litestar static folder
 COPY --from=frontend-build /app/streamonitor/managers/httpmanager_v2/static ./streamonitor/managers/httpmanager_v2/static
 
 EXPOSE 5000
-CMD [ "python3", "Downloader.py"]
+ENTRYPOINT ["./entrypoint.sh"]
