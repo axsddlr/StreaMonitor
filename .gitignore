@@ -6,4 +6,7 @@ downloads/
 venv*/
 .idea/
 config.json
-
+todo.md
+*local.json
+frontend/node_modules/
+streamonitor/managers/httpmanager_v2/static/
