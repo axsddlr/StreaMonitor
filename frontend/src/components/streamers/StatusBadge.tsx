@@ -19,10 +19,24 @@ export function StatusBadge({ status_code, status_text, className }: StatusBadge
       )}
       title={`Status ${status_code}: ${status_text}`}
     >
-      <span
-        className={cn('h-1.5 w-1.5 rounded-full shrink-0', config.dotClass)}
-        aria-hidden="true"
-      />
+      {/* Dot with optional pulsing glow ring for live status */}
+      <span className="relative inline-flex shrink-0 h-2 w-2" aria-hidden="true">
+        {config.pulse && (
+          <span
+            className={cn(
+              'absolute inline-flex h-full w-full rounded-full opacity-75 animate-glow-ring',
+              config.dotClass
+            )}
+          />
+        )}
+        <span
+          className={cn(
+            'relative inline-flex rounded-full h-2 w-2',
+            config.dotClass,
+            config.pulse && 'animate-status-pulse'
+          )}
+        />
+      </span>
       <span>{config.label}</span>
     </span>
   )

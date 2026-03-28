@@ -133,7 +133,7 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
               )}
               <Link
                 to={`/recordings/${encodeURIComponent(row.username)}/${encodeURIComponent(row.site)}`}
-                className="text-sm font-medium text-foreground hover:text-primary hover:underline truncate"
+                className="text-sm font-medium text-foreground hover:text-blue-400 hover:underline truncate transition-colors duration-150"
                 title={`View recordings for ${row.username}`}
               >
                 {info.getValue()}
@@ -206,15 +206,19 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
       columnHelper.accessor('recording', {
         header: 'Rec',
         cell: (info) => (
-          <span title={info.getValue() ? 'Recording' : 'Not recording'} aria-label={info.getValue() ? 'Recording active' : 'Not recording'}>
-            <Circle
-              className={cn(
-                'h-2.5 w-2.5',
-                info.getValue()
-                  ? 'fill-red-500 text-red-500 animate-pulse'
-                  : 'fill-transparent text-muted-foreground/30'
-              )}
-            />
+          <span
+            className="flex items-center"
+            title={info.getValue() ? 'Recording' : 'Not recording'}
+            aria-label={info.getValue() ? 'Recording active' : 'Not recording'}
+          >
+            {info.getValue() ? (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75 animate-glow-ring" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 animate-rec-blink" />
+              </span>
+            ) : (
+              <Circle className="h-2 w-2 fill-transparent text-muted-foreground/20" />
+            )}
           </span>
         ),
         size: 50,
@@ -318,12 +322,12 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
 
   return (
     <>
-      <div className="rounded-md border border-border overflow-hidden">
+      <div className="rounded-md overflow-hidden" style={{ border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm" role="grid" aria-label="Streamers list">
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id} className="border-b border-border bg-secondary/30">
+                <tr key={headerGroup.id} className="border-b border-border" style={{ background: 'hsl(var(--secondary) / 0.4)' }}>
                   {headerGroup.headers.map((header) => {
                     const canSort = header.column.getCanSort()
                     const sortDir = header.column.getIsSorted()
@@ -333,8 +337,8 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
                         key={header.id}
                         scope="col"
                         className={cn(
-                          'px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap',
-                          canSort && 'cursor-pointer select-none hover:text-foreground'
+                          'px-3 py-1.5 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap',
+                          canSort && 'cursor-pointer select-none hover:text-foreground transition-colors duration-150'
                         )}
                         style={{ width: header.getSize() }}
                         onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
@@ -392,12 +396,12 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
                 table.getRowModel().rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-border/50 hover:bg-secondary/20 transition-colors"
+                    className="border-b border-border/40 hover:bg-white/[0.03] transition-colors duration-100"
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
-                        className="px-3 py-1.5 align-middle"
+                        className="px-3 py-1 align-middle"
                         style={{ width: cell.column.getSize() }}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -411,8 +415,8 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
         </div>
 
         {!isLoading && filteredData.length > 0 && (
-          <div className="px-3 py-1.5 border-t border-border/50 bg-secondary/10">
-            <span className="text-xs text-muted-foreground">
+          <div className="px-3 py-1 border-t border-border/40" style={{ background: 'hsl(var(--secondary) / 0.2)' }}>
+            <span className="text-[11px] text-muted-foreground tabular-nums">
               {filteredData.length} streamer{filteredData.length !== 1 ? 's' : ''}
               {filteredData.length !== streamers.length && ` (filtered from ${streamers.length})`}
             </span>
