@@ -283,7 +283,7 @@ class Bot(Thread):
         elif isinstance(m3u_data, str):
             variant_m3u8 = m3u8.loads(m3u_data)
         elif not m3u_data or url:
-            result = self.session.get(url, headers=self.headers, cookies=self.cookies)
+            result = self.session.get(url, headers=self.headers, cookies=self.cookies, timeout=30)
             m3u8_doc = result.content.decode("utf-8")
             variant_m3u8 = m3u8.loads(m3u8_doc)
         else:
@@ -363,10 +363,16 @@ class Bot(Thread):
         pass
 
     def progressInfo(self, p):
-        if p['status'] == 'downloading':
-            self.log("Downloading " + str(round(float(p['downloaded_bytes']) / float(p['total_bytes']) * 100, 1)) + "%")
-        if p['status'] == 'finished':
-            self.log("Show ended. File:" + p['filename'])
+        if p.get('status') == 'downloading':
+            try:
+                downloaded = float(p.get('downloaded_bytes', 0))
+                total = float(p.get('total_bytes', 1))
+                pct = round(downloaded / total * 100, 1) if total > 0 else 0.0
+                self.log(f"Downloading {pct}%")
+            except (ValueError, TypeError, ZeroDivisionError):
+                self.log("Downloading (unknown size)")
+        if p.get('status') == 'finished':
+            self.log("Show ended. File:" + p.get('filename', 'unknown'))
 
     @property
     def outputFolder(self):
