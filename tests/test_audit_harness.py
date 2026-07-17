@@ -29,14 +29,11 @@ class TestConfigAtomicSave:
             assert config_file.read_text() == ""
 
     def test_reachable_from_config_save(self):
-        """save_config uses 'w+' and sys.exit(1) on failure. Reproducible:
-        a non-serializable object in the config list causes file annihilation."""
-        from streamonitor.config import load_config
-
-        # confirm 'w+' is the mode used
+        """Fix verified: save_config now uses tempfile+os.replace, not 'w+'."""
+        from streamonitor.config import save_config
         import inspect
-        src = inspect.getsource(load_config)
-        assert "'w+'" in src or '"w+"' in src
+        src = inspect.getsource(save_config)
+        assert 'os.replace' in src, "Fix verified: atomic save via os.replace"
 
     def test_atomic_save_does_not_erase_on_failure(self, tmp_path):
         """After fix: write to temp file then os.replace — old content survives
@@ -97,17 +94,16 @@ class TestGenderEnumRoundtrip:
         assert GENDER_DATA.get(stored_gender) is None
 
     def test_male_couple_missing_from_gender_data(self):
-        """MALE_COUPLE (value 10) is defined in the enum but missing from GENDER_DATA."""
+        """Fix verified: MALE_COUPLE is now present in GENDER_DATA."""
         from streamonitor.enums.gender import Gender, GENDER_DATA
-        assert Gender.MALE_COUPLE in Gender
-        assert Gender.MALE_COUPLE not in GENDER_DATA
+        assert Gender.MALE_COUPLE in GENDER_DATA, \
+            "Fix verified: MALE_COUPLE added to GENDER_DATA"
 
     def test_bs_icon_typo_in_female_couple(self):
-        """FEMALE_COUPLE uses 'bs_icon' (underscore) while all others use 'bs-icon' (hyphen)."""
+        """Fix verified: FEMALE_COUPLE now uses 'bs-icon' (hyphen)."""
         from streamonitor.enums.gender import Gender, GENDER_DATA
         fc = GENDER_DATA[Gender.FEMALE_COUPLE]
-        assert 'bs_icon' in fc
-        assert 'bs-icon' not in fc
+        assert 'bs-icon' in fc, "Fix verified: bs-icon key uses hyphen"
 
 
 class TestRoomIdBotFromConfig:
@@ -134,14 +130,13 @@ class TestChaturbateBareExcept:
     SystemExit, MemoryError, and all other exceptions."""
 
     def test_bare_except_present(self):
-        """Verify the bare except is actually in the source."""
+        """Fix verified: no bare 'except:' left in Chaturbate.getStatus."""
         import inspect
         from streamonitor.sites.chaturbate import Chaturbate
         src = inspect.getsource(Chaturbate.getStatus)
-        # A bare 'except:' line (not 'except Exception as' or 'except SomeError:')
         lines = [l.strip() for l in src.split('\n')]
         bare_excepts = [l for l in lines if l == 'except:']
-        assert len(bare_excepts) > 0, "No bare 'except:' found in Chaturbate.getStatus"
+        assert len(bare_excepts) == 0, "Fix verified: no bare 'except:' in Chaturbate.getStatus"
 
 
 class TestFmp4sBareExcept:
@@ -215,13 +210,14 @@ class TestBotPlaylistNoTimeout:
     """BUG: bot.py:282 — requests.get() without timeout in getPlaylistVariants."""
 
     def test_get_call_lacks_timeout(self):
-        """Verify the requests.get call in getPlaylistVariants has no timeout."""
+        """Fix verified: timeout=30 added to getPlaylistVariants HTTP call."""
         import inspect
         from streamonitor.bot import Bot
         src = inspect.getsource(Bot.getPlaylistVariants)
         get_calls = [l.strip() for l in src.split('\n') if 'session.get(' in l]
         if get_calls:
-            assert 'timeout' not in get_calls[0]
+            assert 'timeout' in get_calls[0], \
+                "Fix verified: timeout on getPlaylistVariants HTTP call"
 
 
 class TestHlsSessionLeak:
@@ -284,15 +280,13 @@ class TestDownloaderJoinNoTimeout:
     no timeout, causing process deadlock when sub-thread hangs."""
 
     def test_join_no_timeout(self):
-        """process.join() without timeout= parameter blocks forever."""
+        """Fix verified: thread.join() now has timeout=3600."""
         import inspect
         from streamonitor.downloaders.hls import getVideoNativeHLS
         src = inspect.getsource(getVideoNativeHLS)
         lines = [l.strip() for l in src.split('\n')]
-        join_lines = [l for l in lines if '.join()' in l]
-        assert len(join_lines) >= 1
-        for line in join_lines:
-            assert 'timeout' not in line, f"Join without timeout: {line}"
+        join_lines = [l for l in lines if '.join(timeout' in l]
+        assert len(join_lines) >= 1, "Fix verified: join has timeout"
 
 
 class TestBulkStatusManagerSessionLeak:
@@ -379,11 +373,11 @@ class TestWebStatusLookupMissingLongOffline:
     """BUG: status_mappers.py:4-14 — LONG_OFFLINE missing from web_status_lookup."""
 
     def test_long_offline_not_in_web_lookup(self):
-        """Status.LONG_OFFLINE is not a key in web_status_lookup."""
+        """Fix verified: LONG_OFFLINE is now in web_status_lookup."""
         from streamonitor.enums.status import Status
         from streamonitor.managers.httpmanager.mappers.status_mappers import web_status_lookup
-        assert Status.LONG_OFFLINE not in web_status_lookup
-        assert Status.OFFLINE in web_status_lookup
+        assert Status.LONG_OFFLINE in web_status_lookup, \
+            "Fix verified: LONG_OFFLINE added to web_status_lookup"
 
 
 class TestXloveCamNetworkInInit:
@@ -452,27 +446,20 @@ class TestOrphanedTmpFiles:
     """BUG: hls.py:79,95 — tmpfile not deleted when ffmpeg post-processing fails."""
 
     def test_remove_only_reached_on_success(self):
-        """os.remove(tmpfilename) is inside the try block, after ff.run().
-        If ff.run() raises, the remove is never reached."""
+        """Fix verified: os.remove(tmpfilename) is called even on FFRuntimeError."""
         import inspect
         from streamonitor.downloaders.hls import getVideoNativeHLS
         src = inspect.getsource(getVideoNativeHLS)
-        # os.remove should have a finally or be outside try
         lines = src.split('\n')
-        try_idx = None
-        except_idx = None
-        remove_idx = None
-        for i, line in enumerate(lines):
-            if 'try:' in line and 'except' not in line:
-                try_idx = i
+        remove_count = 0
+        in_except = False
+        for line in lines:
             if 'except FFRuntimeError' in line:
-                except_idx = i
-            if 'os.remove(tmpfilename)' in line:
-                remove_idx = i
-        # verify remove is inside try block (between try and except)
-        if try_idx is not None and except_idx is not None and remove_idx is not None:
-            assert try_idx < remove_idx < except_idx, \
-                "os.remove is inside try block — skipped on FFRuntimeError"
+                in_except = True
+            if in_except and 'os.remove(tmpfilename)' in line:
+                remove_count += 1
+        assert remove_count > 0, \
+            "Fix verified: os.remove in except FFRuntimeError block"
 
 
 if __name__ == "__main__":
