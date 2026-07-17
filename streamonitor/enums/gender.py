@@ -21,5 +21,6 @@ GENDER_DATA = {
     Gender.TRANS_WOMAN: {'name': 'Trans woman', 'icon': '⚥', 'bs-icon': 'fa-venus-mars', 'color': 'pink'},
     Gender.TRANS_MAN: {'name': 'Trans man', 'icon': '⚥', 'bs-icon': 'fa-venus-mars', 'color': 'aliceblue'},
     Gender.TRANS: {'name': 'Trans', 'icon': '⚥', 'bs-icon': 'fa-venus-mars', 'color': None},
-    Gender.FEMALE_COUPLE: {'name': 'Female couple', 'icon': '', 'bs_icon': 'fa-venus-double', 'color': 'pink'}
+    Gender.FEMALE_COUPLE: {'name': 'Female couple', 'icon': '', 'bs-icon': 'fa-venus-double', 'color': 'pink'},
+    Gender.MALE_COUPLE: {'name': 'Male couple', 'icon': '', 'bs-icon': 'fa-mars-double', 'color': 'aliceblue'},
 }

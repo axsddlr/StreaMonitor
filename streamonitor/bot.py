@@ -381,7 +381,8 @@ class Bot(Thread):
         instance = cls(username=data['username'])
         instance.running = data.get('running', True)
         instance.country = data.get('country')
-        instance.gender = data.get('gender')
+        raw_gender = data.get('gender')
+        instance.gender = Gender(raw_gender) if raw_gender is not None else None
         return instance
 
     def export(self):
