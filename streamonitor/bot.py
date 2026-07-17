@@ -446,6 +446,9 @@ class RoomIdBot(Bot):
     def fromConfig(cls, data):
         instance = cls(username=data['username'], room_id=data.get('room_id'))
         instance.running = data.get('running', True)
+        instance.country = data.get('country')
+        raw_gender = data.get('gender')
+        instance.gender = Gender(raw_gender) if raw_gender is not None else None
         return instance
 
     def export(self):
