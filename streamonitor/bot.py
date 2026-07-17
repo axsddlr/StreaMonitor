@@ -93,7 +93,7 @@ class Bot(Thread):
         self.url = self.getWebsiteURL()
 
     def getLogger(self):
-        if hasattr(self, 'logger') and self.logger:
+        if hasattr(self, 'logger') and self.logger and self.logger.handlers:
             self.logger.removeHandler(self.logger.handlers[0])
         return log.Logger("[" + self.siteslug + "] " + self.username).get_logger()
 
