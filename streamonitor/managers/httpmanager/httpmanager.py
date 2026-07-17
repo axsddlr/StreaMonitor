@@ -152,6 +152,10 @@ class HTTPManager(Manager):
             video = request.args.get("play_video")
             sort_by_size = bool(request.args.get("sorted", False))
             streamer = cast(Union[Bot, None], self.getStreamer(user, site))
+            if streamer is None:
+                return render_template('recordings.html.jinja',
+                    streamer=InvalidStreamer(user, site), has_error=True,
+                    recordings_error_message="Streamer not found"), 500
             streamer.cache_file_list()
             context = get_streamer_context(streamer, sort_by_size, video, request.headers.get('User-Agent'))
             status_code = 500 if context['has_error'] else 200
@@ -164,8 +168,11 @@ class HTTPManager(Manager):
             return render_template('recordings.html.jinja', **context), status_code
 
         @app.route('/video/<user>/<site>/<path:filename>', methods=['GET'])
+        @login_required
         def get_video(user, site, filename):
             streamer = cast(Union[Bot, None], self.getStreamer(user, site))
+            if streamer is None:
+                return ('Streamer not found', 404)
             return send_from_directory(
                 os.path.abspath(streamer.outputFolder),
                 filename
@@ -176,6 +183,10 @@ class HTTPManager(Manager):
         def watch_video(user, site, play_video):
             sort_by_size = bool(request.args.get("sorted", False))
             streamer = cast(Union[Bot, None], self.getStreamer(user, site))
+            if streamer is None:
+                return render_template('recordings_content.html.jinja',
+                    streamer=InvalidStreamer(user, site),
+                    videos={}, video_to_play=None, total_size=0), 500
             context = get_streamer_context(streamer, sort_by_size, play_video, request.headers.get('User-Agent'))
             status_code = 500 if context['video_to_play'] is None or context['has_error'] else 200
             response = make_response(render_template('recordings_content.html.jinja', **context), status_code)
@@ -187,6 +198,11 @@ class HTTPManager(Manager):
         @login_required
         def sort_videos(user, site):
             streamer = cast(Union[Bot, None], self.getStreamer(user, site))
+            if streamer is None:
+                return render_template('video_list.html.jinja',
+                    streamer=InvalidStreamer(user, site),
+                    videos={}, video_to_play=None, total_size=0,
+                    has_error=True, recordings_error_message="Streamer not found"), 500
             sort_by_size = bool(request.args.get("sorted", False))
             play_video = request.args.get("play_video", None)
             context = get_streamer_context(streamer, sort_by_size, play_video, request.headers.get('User-Agent'))
@@ -200,6 +216,11 @@ class HTTPManager(Manager):
         @login_required
         def delete_video(user, site, filename):
             streamer = cast(Union[Bot, None], self.getStreamer(user, site))
+            if streamer is None:
+                return render_template('video_list.html.jinja',
+                    streamer=InvalidStreamer(user, site),
+                    videos={}, video_to_play=None, total_size=0,
+                    has_error=True, recordings_error_message="Streamer not found"), 500
             sort_by_size = bool(request.args.get("sorted", False))
             play_video = request.args.get("play_video", None)
             context = get_streamer_context(streamer, sort_by_size, play_video, request.headers.get('User-Agent'))
@@ -215,7 +236,7 @@ class HTTPManager(Manager):
                 except Exception as e:
                     status_code = 500
                     context['has_error'] = True
-                    context['recordings_error_message'] = repr(e)
+                    context['recordings_error_message'] = str(e)
                     self.logger.error(e)
             else:
                 status_code = 404
@@ -255,28 +276,28 @@ class HTTPManager(Manager):
         @login_required
         def get_streamer_navbar(user, site):
             streamer = self.getStreamer(user, site)
+            if streamer is None:
+                return render_template('streamer_nav_bar.html.jinja',
+                    streamer=InvalidStreamer(user, site),
+                    has_error=True,
+                    update_content=False,
+                    refresh_freq=WEB_STATUS_FREQUENCY,
+                ), 500
             sort_by_size = bool(request.args.get("sorted", False))
             play_video = request.args.get("play_video", None)
             previous_state = request.args.get("prev_state", False)
             streamer_context = {}
-            # need this from the UI perspective to know whether to update due to polling windows
             if previous_state != streamer.sc:
                 streamer_context = get_streamer_context(
                     streamer, sort_by_size, play_video, request.headers.get('User-Agent'))
-            status_code = 200
-            has_error = False
-            if streamer is None:
-                status_code = 500
-                streamer = InvalidStreamer(user, site)
-                has_error = True
             context = {
                 **streamer_context,
                 'update_content': False if len(streamer_context) == 0 else True,
                 'streamer': streamer,
-                'has_error': has_error,
+                'has_error': False,
                 'refresh_freq': WEB_STATUS_FREQUENCY,
             }
-            return render_template('streamer_nav_bar.html.jinja', **context), status_code
+            return render_template('streamer_nav_bar.html.jinja', **context), 200
 
         @app.route("/streamer-info/<user>/<site>", methods=['GET'])
         @login_required
@@ -289,6 +310,13 @@ class HTTPManager(Manager):
                 status_code = 500
                 res = f"Could not get info for {user} on site {site}"
                 has_error = True
+                context = {
+                    'streamer': InvalidStreamer(user, site),
+                    'streamer_has_error': has_error,
+                    'streamer_error_message': res,
+                    'confirm_deletes': confirm_deletes(request.headers.get('User-Agent')),
+                }
+                return render_template('streamer_record.html.jinja', **context), status_code
             streamer.cache_file_list()
             context = {
                 'streamer': streamer,
@@ -315,6 +343,7 @@ class HTTPManager(Manager):
             return '', status_code
 
         @app.route("/clear", methods=['DELETE'])
+        @login_required
         def clear_modal():
             return '', 204
 
