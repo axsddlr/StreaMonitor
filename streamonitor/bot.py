@@ -77,6 +77,7 @@ class Bot(Thread):
         self.previous_status = None
         self.getVideo = getVideoFfmpeg
         self.stopDownload = None
+        self._cookie_thread = None
         self.recording = False
         self.video_files = []
         self.video_files_total_size = 0
@@ -108,6 +109,8 @@ class Bot(Thread):
             self.running = False
         if thread_too:
             self.quitting = True
+        if self._cookie_thread and self._cookie_thread.is_alive():
+            self._cookie_thread.join(timeout=5)
 
     def getStatus(self):
         return Status.UNKNOWN
@@ -205,7 +208,8 @@ class Bot(Thread):
                                             self.debug('Updated cookies')
                                         else:
                                             self.logger.warning('Failed to update cookies')
-                                cookie_update_process = Thread(target=update_cookie)
+                                cookie_update_process = Thread(target=update_cookie, daemon=True)
+                                self._cookie_thread = cookie_update_process
                                 cookie_update_process.start()
 
                             try:
@@ -350,7 +354,7 @@ class Bot(Thread):
                 self.logger.info(f"Selected {selected_source['resolution'][0]}x{selected_source['resolution'][1]}{frame_rate} resolution")
             selected_source_url = selected_source['url']
             return urljoin(url, selected_source_url)
-        except BaseException as e:
+        except Exception as e:
             self.logger.error("Can't get playlist, got some error: " + str(e))
             traceback.print_tb(e.__traceback__)
             return None
