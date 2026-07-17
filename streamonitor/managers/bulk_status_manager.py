@@ -16,6 +16,7 @@ class BulkStatusManager(Manager):
     def run(self):
         bulk_bots = frozenset([site for site in LOADED_SITES if hasattr(site, 'getStatusBulk') and site.bulk_update])
         bot_sessions = {}
+        self._bot_sessions = bot_sessions
 
         for bot in bulk_bots:
             bot_sessions[bot] = requests.Session()
@@ -38,4 +39,7 @@ class BulkStatusManager(Manager):
             sleep(10)
 
     def do_quit(self, _=None, __=None, ___=None):
+        if hasattr(self, '_bot_sessions'):
+            for s in self._bot_sessions.values():
+                s.close()
         CleanExit(self.streamers)()

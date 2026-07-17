@@ -36,4 +36,7 @@ class StreaMate(Bot):
 
         if r.status_code == 200:
             self.lastInfo = r.json()
-        return Status(r.status_code)
+        try:
+            return Status(r.status_code)
+        except ValueError:
+            return Status.UNKNOWN

@@ -41,7 +41,7 @@ class VideoData:
         if self.abs_path is not None and self.abs_path.lower().endswith('.mkv'):
             mimetype = 'video/mp4'
         try:
-            mimetype = mimetypes.guess_type(self.abs_path)[0]
+            mimetype = mimetypes.guess_type(self.abs_path)[0] or mimetype
         except Exception as e:
             logger.error(e)
         return mimetype

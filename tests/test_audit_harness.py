@@ -264,17 +264,17 @@ class TestMimetypeReturnsNone:
         assert mt is None
 
     def test_mimetype_property_returns_none(self):
-        """For an unrecognized extension, the property returns None."""
+        """Fix verified: mimetype never returns None — falls back to 'application/octet-stream'."""
         import mimetypes
         from streamonitor.models.video_data import VideoData
 
-        # monkey-patch guess_type to simulate unknown extension
         original = mimetypes.guess_type
         try:
             mimetypes.guess_type = lambda x: (None, None)
             v = VideoData.__new__(VideoData)
             v.abs_path = "file.xyz"
-            assert v.mimetype is None
+            assert v.mimetype == 'application/octet-stream', \
+                "Fix verified: mimetype falls back to default, not None"
         finally:
             mimetypes.guess_type = original
 

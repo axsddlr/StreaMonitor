@@ -10,7 +10,8 @@ web_status_lookup = {
     Status.NOTEXIST: "No Such Streamer",
     Status.ERROR: "Error on Download",
     Status.UNKNOWN: "Unknown Error",
-    Status.RESTRICTED: "Restricted: Geo-blocked?"
+    Status.RESTRICTED: "Restricted: Geo-blocked?",
+    Status.LONG_OFFLINE: "Offline (long)",
 }
 
 status_icons_lookup = {

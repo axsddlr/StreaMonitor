@@ -66,8 +66,11 @@ def getVideoFfmpeg(self, url, filename):
 
     def execute():
         nonlocal error
+        stderr_handle = None
+        process = None
         try:
-            stderr = open(filename + '.stderr.log', 'w+') if DEBUG else subprocess.DEVNULL
+            stderr_handle = open(filename + '.stderr.log', 'w') if DEBUG else None
+            stderr = stderr_handle if stderr_handle else subprocess.DEVNULL
             startupinfo = None
             if sys.platform == "win32":
                 startupinfo = subprocess.STARTUPINFO()
@@ -84,19 +87,35 @@ def getVideoFfmpeg(self, url, filename):
                 error = True
                 return
 
-        while process.poll() is None:
-            if stopping.stop:
-                process.communicate(b'q')
-                break
-            try:
-                process.wait(1)
-            except subprocess.TimeoutExpired:
-                pass
-
-        if process.returncode and process.returncode != 0 and process.returncode != 255:
-            self.logger.error('The process exited with an error. Return code: ' + str(process.returncode))
-            error = True
+        if process is None:
+            if stderr_handle:
+                stderr_handle.close()
             return
+
+        try:
+            while process.poll() is None:
+                if stopping.stop:
+                    try:
+                        process.communicate(b'q', timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
+                    break
+                try:
+                    process.wait(1)
+                except subprocess.TimeoutExpired:
+                    pass
+
+            if process.returncode and process.returncode != 0 and process.returncode != 255:
+                self.logger.error('The process exited with an error. Return code: ' + str(process.returncode))
+                error = True
+        finally:
+            if stderr_handle:
+                stderr_handle.close()
 
     thread = Thread(target=execute)
     thread.start()
