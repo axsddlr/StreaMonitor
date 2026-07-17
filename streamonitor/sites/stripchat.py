@@ -10,6 +10,7 @@ import hashlib
 from streamonitor.bot import RoomIdBot
 from streamonitor.downloaders.hls import getVideoNativeHLS
 from streamonitor.enums import Status, Gender, COUNTRIES
+from parameters import MOUFLON_KEYS_PATH
 
 
 class StripChat(RoomIdBot):
@@ -18,7 +19,7 @@ class StripChat(RoomIdBot):
 
     bulk_update = True
     _static_data = None
-    _mouflon_cache_filename = 'stripchat_mouflon_keys.json'
+    _mouflon_cache_filename = MOUFLON_KEYS_PATH
     _mouflon_keys: dict = None
     _cached_keys: dict[str, bytes] = None
     _PRIVATE_STATUSES = frozenset(["private", "groupShow", "p2p", "virtualPrivate", "p2pVoice"])
@@ -30,15 +31,15 @@ class StripChat(RoomIdBot):
         'maleFemale': Gender.BOTH
     }
 
-    if os.path.exists(_mouflon_cache_filename):
-        with open(_mouflon_cache_filename) as f:
-            try:
+    if os.path.isfile(_mouflon_cache_filename):
+        try:
+            with open(_mouflon_cache_filename) as f:
                 if not isinstance(_mouflon_keys, dict):
                     _mouflon_keys = {}
                 _mouflon_keys.update(json.load(f))
                 print('Loaded StripChat mouflon key cache')
-            except Exception as e:
-                print('Error loading mouflon key cache:', e)
+        except Exception as e:
+            print('Error loading mouflon key cache:', e)
 
     def __init__(self, username, room_id=None):
         if StripChat._static_data is None:
