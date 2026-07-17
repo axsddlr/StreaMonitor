@@ -148,13 +148,13 @@ class TestFmp4sBareExcept:
     """BUG: fmp4s_wss.py:48 — bare 'except:' in WebSocket downloader."""
 
     def test_bare_except_present(self):
-        """Verify the bare except in fmp4s_wss.py."""
+        """Fix verified: no bare 'except:' left in fmp4s_wss.py."""
         import inspect
         from streamonitor.downloaders.fmp4s_wss import getVideoWSSVR
         src = inspect.getsource(getVideoWSSVR)
         lines = [l.strip() for l in src.split('\n')]
-        assert any(l == 'except:' for l in lines), \
-            "No bare 'except:' found in fmp4s_wss.py getVideoWSSVR"
+        assert not any(l == 'except:' for l in lines), \
+            "Fix verified: no bare 'except:' in fmp4s_wss.py"
 
 
 class TestBaseExceptionSwallow:
