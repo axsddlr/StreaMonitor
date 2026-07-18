@@ -110,14 +110,18 @@ class Chaturbate(Bot):
         return status
 
     @classmethod
-    def getStatusBulk(cls, streamers):
+    def getStatusBulk(cls, streamers, session=None):
         for streamer in streamers:
             if not isinstance(streamer, Chaturbate):
                 continue
 
-        session = requests.Session()
-        session.headers.update(cls.headers)
-        r = session.get("https://chaturbate.com/affiliates/api/onlinerooms/?format=json&wm=DkfRj", timeout=10)
+        if session is None:
+            session = requests.Session()
+            session.headers.update(cls.headers)
+        r = session.get("https://chaturbate.com/affiliates/api/onlinerooms/?format=json&wm=DkfRj", timeout=30)
+
+        if not r.ok:
+            r.raise_for_status()
 
         try:
             data = r.json()

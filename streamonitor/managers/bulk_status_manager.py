@@ -17,6 +17,7 @@ class BulkStatusManager(Manager):
         bulk_bots = frozenset([site for site in LOADED_SITES if hasattr(site, 'getStatusBulk') and site.bulk_update])
         bot_sessions = {}
         self._bot_sessions = bot_sessions
+        bot_errors = {}
 
         for bot in bulk_bots:
             bot_sessions[bot] = requests.Session()
@@ -33,9 +34,14 @@ class BulkStatusManager(Manager):
             for bot_class, streamers in bot_bulk.items():
                 try:
                     self.logger.debug('Get ' + str(bot_class.site) + ' bulk status')
-                    bot_class.getStatusBulk(streamers)
+                    bot_class.getStatusBulk(streamers, session=bot_sessions[bot_class])
+                    bot_errors[bot_class] = 0
                 except Exception as e:
-                    self.logger.error(f"Error in bulk status check for {bot_class.site}: {e}")
+                    bot_errors[bot_class] = bot_errors.get(bot_class, 0) + 1
+                    backoff = min(60 * bot_errors[bot_class], 600)
+                    self.logger.error(f"Error in bulk status check for {bot_class.site}: {e} (backoff: {backoff}s)")
+                    sleep(backoff)
+                    continue
             sleep(10)
 
     def do_quit(self, _=None, __=None, ___=None):

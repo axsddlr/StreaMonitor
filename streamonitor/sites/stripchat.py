@@ -239,7 +239,7 @@ class StripChat(RoomIdBot):
         return Status.UNKNOWN
 
     @classmethod
-    def getStatusBulk(cls, streamers):
+    def getStatusBulk(cls, streamers, session=None):
         model_ids = {}
         for streamer in streamers:
             if not isinstance(streamer, StripChat):
@@ -247,14 +247,19 @@ class StripChat(RoomIdBot):
             if streamer.room_id:
                 model_ids[streamer.room_id] = streamer
 
+        if session is None:
+            session = requests.Session()
+            session.headers.update(cls.headers)
+
         base_url = 'https://stripchat.com/api/front/models/list?'
         batch_num = 100
         data_map = {}
         model_id_list = list(model_ids)
         for _batch_ids in [model_id_list[i:i+batch_num] for i in range(0, len(model_id_list), batch_num)]:
-            session = requests.Session()
-            session.headers.update(cls.headers)
-            r = session.get(base_url + '&'.join(f'modelIds[]={model_id}' for model_id in _batch_ids), timeout=10)
+            r = session.get(base_url + '&'.join(f'modelIds[]={model_id}' for model_id in _batch_ids), timeout=30)
+
+            if not r.ok:
+                r.raise_for_status()
 
             try:
                 data = r.json()
