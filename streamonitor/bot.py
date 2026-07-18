@@ -152,7 +152,7 @@ class Bot(Thread):
                 for file in os.scandir(videos_folder):
                     if file.is_dir():
                         continue
-                    if not os.path.splitext(file.name)[1][1:] in ['mp4', 'mkv', 'webm', 'mov', 'avi', 'wmv']:
+                    if not os.path.splitext(file.name)[1][1:] in ['mp4', 'mkv', 'webm', 'mov', 'avi', 'wmv', 'ts']:
                         continue
                     video = VideoData(file, self.username)
                     _total_size += video.filesize
