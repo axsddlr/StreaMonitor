@@ -19,6 +19,14 @@ class Chaturbate(Bot):
         'c': Gender.BOTH,
     }
 
+    @classmethod
+    def validateUsername(cls, username):
+        try:
+            r = requests.head(f'https://chaturbate.com/{username}/', timeout=10)
+            return r.ok
+        except Exception:
+            return False
+
     def __init__(self, username):
         super().__init__(username)
         self.sleep_on_offline = 30

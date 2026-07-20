@@ -171,8 +171,9 @@
                                 <label for="filter-status" class="form-label">Status</label>
                                 <div class="input-group">
                                     <select name="filter-status" required class="filter-streamers-state form-select" id="filter-status" hx-get="/refresh/streamers" hx-trigger="change delay:250ms">
-                                        <option value="all" {{'selected="selected"' if status_filter == "all" or not status_filter }}>All Status</option>
-                                        <option value="running" {{'selected="selected"' if status_filter == "running"}}>Running</option>
+                                        <option value="all" {{'selected="selected"' if status_filter == "all" or not status_filter }}>All</option>
+                                        <option value="running" {{'selected="selected"' if status_filter == "running"}}>Active</option>
+                                        <option value="inactive" {{'selected="selected"' if status_filter == "inactive"}}>Inactive</option>
                                         <option value="rec" {{'selected="selected"' if status_filter == "rec"}}>Recording</option>
                                         {% for status in streamer_statuses.items() %}
                                             <option value="{{ status[0].value }}" {{'selected="selected"' if status_filter == (status[0].value|string)}}>{{ status[1].split(',')[0] }}</option>

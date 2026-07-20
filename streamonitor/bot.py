@@ -424,6 +424,10 @@ class Bot(Thread):
                 raise Exception('No such site')
         return None
 
+    @classmethod
+    def validateUsername(cls, username):
+        return True
+
 
 class RoomIdBot(Bot):
     def __init__(self, username, room_id=None):

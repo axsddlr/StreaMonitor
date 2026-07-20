@@ -12,6 +12,8 @@ def filter_streamers(streamer: Bot, username_filter: Union[str, None], site_filt
         result = result and streamer.site == site_filter
     if status_filter and status_filter == 'running':
         result = result and streamer.running
+    elif status_filter and status_filter == 'inactive':
+        result = result and not streamer.running
     elif status_filter and status_filter == 'rec':
         result = result and streamer.recording
     elif status_filter and status_filter != 'all':

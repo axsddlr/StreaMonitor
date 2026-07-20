@@ -56,6 +56,11 @@ class Manager(Thread):
         if streamer:
             return 'Streamer already exists'
         elif username and site:
+            site_cls = Bot.str2site(site)
+            if not site_cls:
+                return f"Unknown site: {site}"
+            if not site_cls.validateUsername(username):
+                return f'Username "{username}" not found on {site_cls.site}'
             try:
                 streamer = Bot.createInstance(username, site)
                 self.streamers.append(streamer)
