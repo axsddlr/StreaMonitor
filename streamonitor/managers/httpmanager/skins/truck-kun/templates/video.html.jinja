@@ -1,5 +1,5 @@
 <h4 class="playing-video">Playing {{ video_to_play.shortname }}</h4>
-<video preload="auto" controls="controls">
+<video preload="auto">
     <source src="/video/{{ user }}/{{ site }}/{{ video_to_play.filename }}" type="{{ video_to_play.mimetype }}" />
 </video>
 <a href="/video/{{ user }}/{{ site }}/{{ video_to_play.filename }}" download>Download <i class="icon feather icon-download"></i></a>
