@@ -29,23 +29,30 @@ REQUEST_TIMEOUT = 30
 def getVideoNativeHLS(self, url, filename, m3u_processor=None):
     self.stopDownloadFlag = False
     error = False
+    error_reason = None
     tmpfilename = filename[:-len('.' + CONTAINER)] + '.tmp.ts'
     session = requests.Session()
 
     try:
         def execute():
-            nonlocal error
+            nonlocal error, error_reason
             downloaded_list = []
             try:
                 with open(tmpfilename, 'wb') as outfile:
                     did_download = False
                     while not self.stopDownloadFlag:
                         r = session.get(url, headers=self.headers, cookies=self.cookies, timeout=REQUEST_TIMEOUT)
+                        if r.status_code != 200:
+                            error = True
+                            error_reason = f'playlist request failed with status {r.status_code}'
+                            return
                         content = r.content.decode("utf-8")
                         if m3u_processor:
                             content = m3u_processor(content)
                         chunklist = m3u8.loads(content)
                         if len(chunklist.segments) == 0:
+                            error = True
+                            error_reason = 'no segments in playlist'
                             return
                         for chunk in chunklist.segment_map + chunklist.segments:
                             if chunk.uri in downloaded_list:
@@ -59,6 +66,7 @@ def getVideoNativeHLS(self, url, filename, m3u_processor=None):
                             m = session.get(chunk_uri, headers=self.headers, cookies=self.cookies, timeout=REQUEST_TIMEOUT)
                             if m.status_code != 200:
                                 error = True
+                                error_reason = f'segment request failed with status {m.status_code}'
                                 return
                             outfile.write(m.content)
                             if self.stopDownloadFlag:
@@ -78,21 +86,22 @@ def getVideoNativeHLS(self, url, filename, m3u_processor=None):
         self.stopDownload = None
 
         if error:
-            if os.path.exists(tmpfilename):
-                os.remove(tmpfilename)
+            self.logger.error(f'Native HLS download failed: {error_reason or "unknown error"}')
             return False
 
         if not os.path.exists(tmpfilename):
+            self.logger.error('Native HLS download failed: temp file missing')
             return False
 
         if os.path.getsize(tmpfilename) == 0:
             os.remove(tmpfilename)
+            self.logger.error('Native HLS download failed: temp file empty')
             return False
 
         try:
             stdout = open(filename + '.postprocess_stdout.log', 'w') if DEBUG else subprocess.DEVNULL
             stderr = open(filename + '.postprocess_stderr.log', 'w') if DEBUG else subprocess.DEVNULL
-            output_str = '-c:a copy -c:v copy'
+            output_str = '-c:a copy -c:v copy -movflags +frag_keyframe+empty_moov'
             suffix = ''
             if SEGMENT_TIME is not None:
                 output_str += f' -f segment -reset_timestamps 1 -segment_time {str(SEGMENT_TIME)}'
@@ -107,8 +116,12 @@ def getVideoNativeHLS(self, url, filename, m3u_processor=None):
                 os.remove(tmpfilename)
             except OSError:
                 pass
-            if e.exit_code is not None and e.exit_code != 255:
+            if e.exit_code is None or (e.exit_code != 0 and e.exit_code != 255):
+                self.logger.error(f'FFmpeg failed on native HLS post-process: exit code {e.exit_code}')
                 return False
+        except Exception as e:
+            self.logger.error(f'Unexpected error in native HLS post-process: {e}')
+            return False
 
         return True
     finally:
