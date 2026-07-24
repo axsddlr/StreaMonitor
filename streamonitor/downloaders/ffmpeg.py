@@ -30,7 +30,7 @@ def getVideoFfmpeg(self, url, filename):
     if isinstance(url, tuple):
         video_url, audio_url = url
         cmd.extend(['-i', video_url, '-i', audio_url])
-        cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0'])
+        cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0', '-movflags', '+frag_keyframe+empty_moov'])
     else:
         cmd.extend([
             '-max_reload', '20',
@@ -39,6 +39,7 @@ def getVideoFfmpeg(self, url, filename):
             '-i', url,
             '-c:a', 'copy',
             '-c:v', 'copy',
+            '-movflags', '+frag_keyframe+empty_moov',
         ])
 
     suffix = ''
@@ -52,6 +53,7 @@ def getVideoFfmpeg(self, url, filename):
             '-reset_timestamps', '1',
             '-segment_time', str(SEGMENT_TIME),
             '-strftime', '1',
+            '-movflags', '+frag_keyframe+empty_moov',
             f'{username}-%Y%m%d-%H%M%S{suffix}.{CONTAINER}'
         ])
     else:
@@ -101,7 +103,7 @@ def getVideoFfmpeg(self, url, filename):
             while process.poll() is None:
                 if stopping.stop:
                     try:
-                        process.communicate(b'q', timeout=10)
+                        process.communicate(b'q', timeout=30)
                     except subprocess.TimeoutExpired:
                         process.terminate()
                         try:

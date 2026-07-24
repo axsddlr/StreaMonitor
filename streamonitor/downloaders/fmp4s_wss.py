@@ -77,7 +77,7 @@ def getVideoWSSVR(self, url, filename):
     try:
         stdout = open(filename + '.postprocess_stdout.log', 'w+') if DEBUG else subprocess.DEVNULL
         stderr = open(filename + '.postprocess_stderr.log', 'w+') if DEBUG else subprocess.DEVNULL
-        output_str = '-c:a copy -c:v copy'
+        output_str = '-c:a copy -c:v copy -movflags +frag_keyframe+empty_moov'
         if SEGMENT_TIME is not None:
             output_str += f' -f segment -reset_timestamps 1 -segment_time {str(SEGMENT_TIME)}'
             filename = basefilename + '_%03d' + suffix + '.' + CONTAINER
@@ -85,7 +85,7 @@ def getVideoWSSVR(self, url, filename):
         ff.run(stdout=stdout, stderr=stderr)
         os.remove(tmpfilename)
     except FFRuntimeError as e:
-        if e.exit_code and e.exit_code != 255:
+        if e.exit_code is None or (e.exit_code != 0 and e.exit_code != 255):
             return False
 
     return True
