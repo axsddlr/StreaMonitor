@@ -12,7 +12,7 @@ import streamonitor.log as log
 from functools import wraps
 from secrets import compare_digest
 from streamonitor.bot import Bot, LOADED_SITES
-from streamonitor.enums import Status
+from streamonitor.enums import GENDER_DATA, Status
 from streamonitor.manager import Manager
 from streamonitor.managers.outofspace_detector import OOSDetector
 from streamonitor.utils import human_file_size
@@ -111,6 +111,78 @@ class HTTPManager(Manager):
         @login_required
         def execApiCommand():
             return self.execCmd(request.args.get("command"))
+
+        @app.route('/api/homepage')
+        @login_required
+        def apiHomepage():
+            streamers_list = []
+            summary = {
+                "total": 0,
+                "running": 0,
+                "online": 0,
+                "offline": 0,
+                "long_offline": 0,
+                "recording": 0,
+                "private": 0,
+                "error": 0,
+                "not_running": 0,
+                "unknown": 0,
+            }
+
+            for streamer in self.streamers:
+                summary["total"] += 1
+                if streamer.running:
+                    summary["running"] += 1
+                if streamer.recording:
+                    summary["recording"] += 1
+
+                sc = streamer.sc
+                if sc == Status.PUBLIC:
+                    summary["online"] += 1
+                elif sc == Status.OFFLINE:
+                    summary["offline"] += 1
+                elif sc == Status.LONG_OFFLINE:
+                    summary["long_offline"] += 1
+                elif sc == Status.PRIVATE:
+                    summary["private"] += 1
+                elif sc == Status.ERROR:
+                    summary["error"] += 1
+                elif sc == Status.NOTRUNNING:
+                    summary["not_running"] += 1
+                else:
+                    summary["unknown"] += 1
+
+                item = {
+                    "username": streamer.username,
+                    "site": streamer.siteslug,
+                    "site_name": streamer.site,
+                    "status": streamer.status(),
+                    "status_code": sc.value,
+                    "recording": streamer.recording,
+                    "running": streamer.running,
+                    "video_total_size": streamer.video_files_total_size,
+                    "video_total_size_human": human_file_size(streamer.video_files_total_size)
+                        if streamer.video_files_total_size else "0 B",
+                    "url": streamer.url,
+                }
+
+                if streamer.country:
+                    item["country_code"] = streamer.country
+
+                if streamer.gender:
+                    item["gender"] = GENDER_DATA.get(streamer.gender, {}).get("name", str(streamer.gender))
+
+                streamers_list.append(item)
+
+            usage = OOSDetector.space_usage()
+
+            return Response(json.dumps({
+                "streamers": streamers_list,
+                **summary,
+                "disk_free_percent": round(OOSDetector.free_space(), 2),
+                "disk_free": human_file_size(usage.free),
+                "disk_total": human_file_size(usage.total),
+            }), mimetype='application/json')
 
         @app.route('/', methods=['GET'])
         @login_required
