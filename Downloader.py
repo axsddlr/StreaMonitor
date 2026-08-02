@@ -2,7 +2,7 @@ import os
 import sys
 import streamonitor.config as config
 from streamonitor.managers.bulk_status_manager import BulkStatusManager
-from streamonitor.managers.httpmanager import HTTPManager
+from streamonitor.managers.httpmanager_v2 import HTTPManager
 from streamonitor.managers.climanager import CLIManager
 from streamonitor.managers.zmqmanager import ZMQManager
 from streamonitor.managers.outofspace_detector import OOSDetector
