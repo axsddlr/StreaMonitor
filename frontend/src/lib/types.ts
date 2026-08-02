@@ -19,7 +19,6 @@ export interface RecordingDTO {
   filename: string
   filesize: number
   filesize_human: string
-  abs_path: string
 }
 
 export interface DiskSpaceDTO {

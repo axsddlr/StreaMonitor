@@ -25,7 +25,6 @@ class RecordingDTO:
     filename: str
     filesize: int
     filesize_human: str
-    abs_path: str
 
 
 @dataclass

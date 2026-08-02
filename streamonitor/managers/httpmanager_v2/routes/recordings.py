@@ -1,8 +1,7 @@
 import os
 from dataclasses import asdict
-from pathlib import Path
 
-from litestar import get, delete
+from litestar import Request, get, delete
 from litestar.controller import Controller
 from litestar.exceptions import NotFoundException, HTTPException
 from litestar.response import File
@@ -13,7 +12,7 @@ from streamonitor.managers.httpmanager_v2.schemas import RecordingDTO
 from streamonitor.utils.human_file_size import human_file_size
 
 
-def _manager(request):
+def _manager(request: Request):
     return request.app.state.manager
 
 
@@ -24,7 +23,7 @@ class RecordingsController(Controller):
     @get("/{username:str}/{site:str}/recordings")
     async def list_recordings(
         self,
-        request,
+        request: Request,
         username: str,
         site: str,
         sort_by_size: bool = False,
@@ -46,7 +45,6 @@ class RecordingsController(Controller):
                 filename=v.filename,
                 filesize=v.filesize,
                 filesize_human=human_file_size(v.filesize),
-                abs_path=v.abs_path,
             )
             for v in videos
         ]
@@ -58,7 +56,7 @@ class RecordingsController(Controller):
         }
 
     @delete("/{username:str}/{site:str}/recordings/{filename:path}", status_code=200)
-    async def delete_recording(self, request, username: str, site: str, filename: str) -> dict:
+    async def delete_recording(self, request: Request, username: str, site: str, filename: str) -> dict:
         manager = _manager(request)
         streamer = manager.getStreamer(username, site)
         if streamer is None:
@@ -73,37 +71,29 @@ class RecordingsController(Controller):
             os.remove(match.abs_path)
             streamer.cache_file_list()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=repr(e))
+            raise HTTPException(status_code=500, detail=str(e))
         return {"message": "Deleted"}
 
 
 class VideoController(Controller):
     path = "/api/v1/video"
+    guards = [auth_guard]
 
     @get("/{username:str}/{site:str}/{filename:path}")
-    async def serve_video(self, request, username: str, site: str, filename: str) -> File:
-        """Serve video file. Auth via token query param (required for <video> elements)."""
-        from streamonitor.managers.httpmanager_v2.auth import (
-            auth_guard, validate_token, _check_basic_auth, _check_bearer_token
-        )
-        from parameters import WEBSERVER_PASSWORD
-        from litestar.exceptions import NotAuthorizedException
-
-        if WEBSERVER_PASSWORD:
-            authorization = request.headers.get("authorization")
-            token_param = request.query_params.get("token", "")
-            if (
-                not _check_basic_auth(authorization)
-                and not _check_bearer_token(authorization)
-                and not validate_token(token_param)
-            ):
-                raise NotAuthorizedException(detail="Unauthorized")
-
+    async def serve_video(self, request: Request, username: str, site: str, filename: str) -> File:
+        """Serve video file. auth_guard supports token-in-query-param auth,
+        required since <video> elements can't send custom Authorization headers."""
         manager = _manager(request)
         streamer = manager.getStreamer(username, site)
         if streamer is None:
             raise NotFoundException(detail="Streamer not found")
-        file_path = os.path.join(os.path.abspath(streamer.outputFolder), filename)
-        if not os.path.isfile(file_path):
+
+        # Only serve files that are known recordings of this streamer (matched by
+        # exact filename against the cached video list) instead of joining the raw,
+        # user-supplied path onto disk — this prevents directory traversal
+        # (e.g. filename="../../../etc/passwd") from escaping outputFolder.
+        streamer.cache_file_list()
+        match = next((v for v in streamer.video_files if v.filename == filename), None)
+        if match is None or not os.path.isfile(match.abs_path):
             raise NotFoundException(detail="File not found")
-        return File(path=file_path, filename=filename)
+        return File(path=match.abs_path, filename=match.filename)
