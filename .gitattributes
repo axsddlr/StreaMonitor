@@ -1,0 +1,3 @@
+# Force LF line endings for shell scripts so the shebang (#!/bin/sh) works
+# inside Linux containers regardless of the checkout platform.
+*.sh text eol=lf
