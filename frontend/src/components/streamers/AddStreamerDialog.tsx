@@ -33,7 +33,6 @@ export function AddStreamerDialog({ sites }: AddStreamerDialogProps) {
   const queryClient = useQueryClient()
 
   const siteEntries = Object.entries(sites)
-  const firstSiteSlug = siteEntries[0]?.[0] ?? ''
 
   const mutation = useMutation({
     mutationFn: ({ username, site }: { username: string; site: string }) =>
@@ -104,11 +103,7 @@ export function AddStreamerDialog({ sites }: AddStreamerDialogProps) {
               <label htmlFor="add-site" className="text-sm font-medium">
                 Site
               </label>
-              <Select
-                value={site || firstSiteSlug}
-                onValueChange={setSite}
-                required
-              >
+              <Select value={site} onValueChange={setSite} required>
                 <SelectTrigger id="add-site">
                   <SelectValue placeholder="Select site..." />
                 </SelectTrigger>
@@ -134,7 +129,7 @@ export function AddStreamerDialog({ sites }: AddStreamerDialogProps) {
             <Button
               type="submit"
               size="sm"
-              disabled={mutation.isPending || !username.trim() || !(site || firstSiteSlug)}
+              disabled={mutation.isPending || !username.trim() || !site}
             >
               {mutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Add
