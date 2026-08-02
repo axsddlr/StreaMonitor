@@ -26,6 +26,10 @@ class HTTPManager(Manager):
             host=WEBSERVER_HOST,
             port=WEBSERVER_PORT,
             log_config=uvicorn_log_config,
+            # uvloop cannot be imported from a non-main thread ("can't register
+            # atexit after shutdown" RuntimeError), and this server runs inside
+            # a manager daemon thread, so force the asyncio event loop.
+            loop="asyncio",
         )
         server = uvicorn.Server(config)
         # Server.serve() only installs signal handlers when running in the
