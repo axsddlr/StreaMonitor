@@ -31,6 +31,12 @@ class StripChat(RoomIdBot):
         'maleFemale': Gender.BOTH
     }
 
+    _KEYS_GITHUB_URL = 'https://raw.githubusercontent.com/kesamom/stripchat_mouflon/main/stripchat_mouflon_keys.json'
+    _KEYS_DISCOVERY_MAX_ATTEMPTS = 3
+    _MMP_PLAYER_ORIGIN = 'https://img.doppiocdn.com/player/mmp'
+    _MMP_CHUNK_PATTERN = re.compile(r'(?:mmp\.doppiocdn\.com|img\.doppiocdn\.com)/player/(?:mmp|doppio)/(v[\d.]+)/(chunk-[a-f0-9]+\.js)', re.IGNORECASE)
+    _STALE_KEY_MARKER_PATTERN = re.compile(r'[A-Za-z0-9_+-]{16,24}\s*:\s*"[A-Za-z0-9_+-]{16,24}"', re.ASCII)
+
     if os.path.isfile(_mouflon_cache_filename):
         try:
             with open(_mouflon_cache_filename) as f:
@@ -49,18 +55,144 @@ class StripChat(RoomIdBot):
             except Exception as e:
                 print('Error initializing StripChat static data:', e)
 
+        StripChat._load_keys()
+
         super().__init__(username, room_id)
         self._id = None
         self.vr = False
         self.getVideo = lambda _, url, filename: getVideoNativeHLS(self, url, filename, StripChat.m3u_decoder)
 
     @classmethod
+    def _load_keys(cls):
+        if cls._mouflon_keys is not None:
+            return
+        cls._mouflon_keys = {}
+        if os.path.isfile(cls._mouflon_cache_filename):
+            try:
+                with open(cls._mouflon_cache_filename) as f:
+                    cls._mouflon_keys.update(json.load(f))
+            except Exception:
+                pass
+
+    @classmethod
+    def _save_keys(cls):
+        try:
+            with open(cls._mouflon_cache_filename, 'w') as f:
+                json.dump(cls._mouflon_keys, f, indent=2)
+        except Exception as e:
+            print('Error saving mouflon key cache:', e)
+
+    @classmethod
+    def _ensure_keys(cls):
+        if cls._mouflon_keys is None:
+            cls._mouflon_keys = {}
+
+    @classmethod
+    def refreshKeysFromGitHub(cls):
+        cls._ensure_keys()
+        try:
+            r = requests.get(cls._KEYS_GITHUB_URL, headers=cls.headers, timeout=15)
+            if r.status_code == 200:
+                new_keys = r.json()
+                new_count = sum(1 for k in new_keys if k not in cls._mouflon_keys)
+                cls._mouflon_keys.update(new_keys)
+                cls._save_keys()
+                if new_count:
+                    print(f'Refreshed {new_count} new StripChat mouflon keys from GitHub')
+                return True
+        except Exception as e:
+            print('Failed to refresh StripChat keys from GitHub:', e)
+        return False
+
+    @classmethod
+    def _discoverPlayerBundleUrl(cls):
+        session = requests.Session()
+        try:
+            r = session.get('https://stripchat.com/', headers=cls.headers, timeout=15)
+            if r.status_code == 200:
+                match = cls._MMP_CHUNK_PATTERN.search(r.text)
+                if match:
+                    return match.group(0)
+                viewcam_scripts = re.findall(r'viewcam\.([a-f0-9]+)\.js', r.text)
+                if viewcam_scripts:
+                    for vc_hash in viewcam_scripts[:1]:
+                        vc_url = f'https://assets.chapturist.com/assets/viewcam.{vc_hash}.js'
+                        vc_r = session.get(vc_url, headers=cls.headers, timeout=15)
+                        if vc_r.status_code == 200:
+                            match = cls._MMP_CHUNK_PATTERN.search(vc_r.text)
+                            if match:
+                                return match.group(0)
+        except Exception as e:
+            print('Failed to discover MMP player bundle URL:', e)
+        return None
+
+    @classmethod
+    def _extractKeysFromBundle(cls, bundle_url):
+        if not bundle_url:
+            return {}
+        if not bundle_url.startswith('http'):
+            bundle_url = 'https:' + bundle_url
+        keys = {}
+        try:
+            r = requests.get(bundle_url, headers=cls.headers, timeout=15)
+            if r.status_code != 200:
+                print(f'Failed to fetch player bundle: HTTP {r.status_code}')
+                return {}
+            content = r.text
+            matches = cls._STALE_KEY_MARKER_PATTERN.findall(content)
+            candidate_strings = set()
+            for m in matches:
+                if ':' in m:
+                    parts = m.split(':', 1)
+                    key_part = parts[0].strip().strip('"').strip("'")
+                    val_part = parts[1].strip().strip('"').strip("'")
+                    if 16 <= len(key_part) <= 24 and 16 <= len(val_part) <= 24:
+                        candidate_strings.add((key_part, val_part))
+            for k, v in candidate_strings:
+                if k in cls._mouflon_keys or v in cls._mouflon_keys.values():
+                    continue
+            key_candidates = {}
+            for k, v in candidate_strings:
+                occurrences = content.count(f'"{k}"')
+                if occurrences >= 2 and k != v:
+                    key_candidates[k] = v
+            if key_candidates:
+                print(f'Extracted {len(key_candidates)} candidate key pairs from MMP player bundle')
+                has_known_pattern = any(
+                    len(k) >= 16 and len(v) >= 16 and k != v
+                    for k, v in key_candidates.items()
+                )
+                if has_known_pattern:
+                    return key_candidates
+        except Exception as e:
+            print('Failed to extract keys from player bundle:', e)
+        return keys
+
+    @classmethod
+    def refreshKeysFromPlayerBundle(cls):
+        cls._ensure_keys()
+        bundle_url = cls._discoverPlayerBundleUrl()
+        if not bundle_url:
+            return False
+        extracted = cls._extractKeysFromBundle(bundle_url)
+        if extracted:
+            new_count = sum(1 for k in extracted if k not in cls._mouflon_keys)
+            cls._mouflon_keys.update(extracted)
+            cls._save_keys()
+            if new_count:
+                print(f'Added {new_count} new keys from MMP player bundle')
+            return True
+        return False
+
+    @classmethod
     def getInitialData(cls):
         session = requests.Session()
-        r = session.get('https://stripchat.com/api/front/v3/config/static', headers=cls.headers)
+        r = session.get('https://stripchat.com/api/front/v3/config/static', headers=cls.headers, timeout=15)
         if r.status_code != 200:
             raise Exception("Failed to fetch static data from StripChat")
         StripChat._static_data = r.json().get('static')
+
+        cls.refreshKeysFromGitHub()
 
     @classmethod
     def m3u_decoder(cls, content):
@@ -104,11 +236,9 @@ class StripChat(RoomIdBot):
 
     @classmethod
     def getMouflonDecKey(cls, pkey):
-        if cls._mouflon_keys is None:
-            cls._mouflon_keys = {}
+        cls._ensure_keys()
         if pkey in cls._mouflon_keys:
             return cls._mouflon_keys[pkey]
-        # else: find pdkey
         return None
 
     @staticmethod
@@ -135,16 +265,16 @@ class StripChat(RoomIdBot):
 
     def getPlaylistVariants(self, url):
         url = "https://edge-hls.{host}/hls/{id}{vr}/master/{id}{vr}{auto}.m3u8".format(
-                host='doppiocdn.' + random.choice(['org', 'com', 'net']),
+                host='doppiocdn.' + random.choice(['com', 'net', 'org', 'media']),
                 id=self.room_id,
                 vr='_vr' if self.vr else '',
                 auto='_auto' if not self.vr else ''
             )
-        result = self.session.get(url, headers=self.headers, cookies=self.cookies)
+        result = self.session.get(url, headers=self.headers, cookies=self.cookies, timeout=30)
         m3u8_doc = result.content.decode("utf-8")
         psch, pkey, pdkey = StripChat._getMouflonFromM3U(m3u8_doc)
         if pdkey is None:
-            self.log(f'Failed to get mouflon decryption key')
+            self.log(f'Failed to get mouflon decryption key for pkey={pkey}')
             return []
         variants = super().getPlaylistVariants(m3u_data=m3u8_doc)
         return [variant | {'url': f'{variant["url"]}{"&" if "?" in variant["url"] else "?"}psch={psch}&pkey={pkey}'}
@@ -159,7 +289,8 @@ class StripChat(RoomIdBot):
     def _getStatusData(self, username):
         r = self.session.get(
             f'https://stripchat.com/api/front/v2/models/username/{username}/cam?uniq={StripChat.uniq()}',
-            headers=self.headers
+            headers=self.headers,
+            timeout=15
         )
 
         try:
