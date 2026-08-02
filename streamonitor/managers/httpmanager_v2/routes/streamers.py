@@ -1,7 +1,6 @@
 from dataclasses import asdict
-from typing import Any
 
-from litestar import get, post, delete, patch
+from litestar import Request, get, post, delete, patch
 from litestar.controller import Controller
 from litestar.exceptions import NotFoundException, HTTPException
 
@@ -10,7 +9,7 @@ from streamonitor.managers.httpmanager_v2.serializers import streamer_to_dto, di
 from streamonitor.managers.httpmanager_v2.schemas import AddStreamerRequest
 
 
-def _manager(request):
+def _manager(request: Request):
     return request.app.state.manager
 
 
@@ -21,7 +20,7 @@ class StreamersController(Controller):
     @get()
     async def list_streamers(
         self,
-        request,
+        request: Request,
         filter_username: str = "",
         filter_site: str = "",
         filter_status: str = "",
@@ -68,15 +67,21 @@ class StreamersController(Controller):
         }
 
     @post()
-    async def add_streamer(self, request, data: AddStreamerRequest) -> dict:
+    async def add_streamer(self, request: Request, data: AddStreamerRequest) -> dict:
         manager = _manager(request)
         streamer = manager.getStreamer(data.username, data.site)
         res = manager.do_add(streamer, data.username, data.site)
-        success = res not in ("Streamer already exists", "Missing value(s)") and not res.startswith("Failed")
+        # Manager.do_add only returns "Added [...]" on success; every other
+        # branch (unknown site, invalid username, already exists, missing
+        # value(s), internal failure) is an error message starting with
+        # something else. Checking for the success prefix directly (instead
+        # of blocklisting known error strings) avoids silently treating any
+        # future/unrecognized error message as a success.
+        success = res.startswith("Added ")
         return {"message": res, "success": success}
 
     @delete("/{username:str}/{site:str}", status_code=200)
-    async def remove_streamer(self, request, username: str, site: str) -> dict:
+    async def remove_streamer(self, request: Request, username: str, site: str) -> dict:
         manager = _manager(request)
         streamer = manager.getStreamer(username, site)
         res = manager.do_remove(streamer, username, site)
@@ -87,7 +92,7 @@ class StreamersController(Controller):
         return {"message": res}
 
     @patch("/{username:str}/{site:str}/toggle")
-    async def toggle_streamer(self, request, username: str, site: str) -> dict:
+    async def toggle_streamer(self, request: Request, username: str, site: str) -> dict:
         manager = _manager(request)
         streamer = manager.getStreamer(username, site)
         if streamer is None:
@@ -99,13 +104,13 @@ class StreamersController(Controller):
         return {"message": res, "running": streamer.running}
 
     @patch("/start-all")
-    async def start_all(self, request) -> dict:
+    async def start_all(self, request: Request) -> dict:
         manager = _manager(request)
         res = manager.do_start(None, '*', None)
         return {"message": res}
 
     @patch("/stop-all")
-    async def stop_all(self, request) -> dict:
+    async def stop_all(self, request: Request) -> dict:
         manager = _manager(request)
         res = manager.do_stop(None, '*', None)
         return {"message": res}
