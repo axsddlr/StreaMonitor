@@ -1,8 +1,7 @@
-import os
 from pathlib import Path
 
 from litestar import get
-from litestar.response import File, Redirect
+from litestar.response import File
 from litestar.exceptions import NotFoundException
 
 STATIC_DIR = Path(__file__).parent.parent / "static"

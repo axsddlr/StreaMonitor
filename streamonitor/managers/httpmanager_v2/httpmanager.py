@@ -1,5 +1,3 @@
-import logging
-
 import uvicorn
 
 import streamonitor.log as log

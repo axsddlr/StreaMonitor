@@ -1,13 +1,9 @@
 import secrets
 import base64
-from typing import Any
 
-from litestar import Request
 from litestar.connection import ASGIConnection
 from litestar.handlers import BaseRouteHandler
 from litestar.exceptions import NotAuthorizedException
-from litestar.middleware import AbstractMiddleware
-from litestar.types import ASGIApp, Scope, Receive, Send
 
 from parameters import WEBSERVER_PASSWORD
 
