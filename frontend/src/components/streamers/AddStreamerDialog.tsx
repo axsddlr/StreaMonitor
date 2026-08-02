@@ -107,7 +107,7 @@ export function AddStreamerDialog({ sites }: AddStreamerDialogProps) {
                 <SelectTrigger id="add-site">
                   <SelectValue placeholder="Select site..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent side="bottom" avoidCollisions={false}>
                   {siteEntries.map(([slug, name]) => (
                     <SelectItem key={slug} value={slug}>
                       {name}
