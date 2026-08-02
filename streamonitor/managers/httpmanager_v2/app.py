@@ -1,5 +1,4 @@
-import logging
-import traceback
+from pathlib import Path
 
 from litestar import Litestar, Request
 from litestar.config.cors import CORSConfig
@@ -43,6 +42,10 @@ def _server_error_handler(request: Request, exc: Exception) -> Response:
 
 
 def create_app(manager) -> Litestar:
+    # The React SPA is served by spa_root/spa_fallback (see routes/spa.py).
+    # They use Response instead of Litestar's File so no Content-Disposition
+    # header is emitted - otherwise the browser downloads index.html instead
+    # of rendering it.
     app = Litestar(
         route_handlers=[
             StreamersController,
