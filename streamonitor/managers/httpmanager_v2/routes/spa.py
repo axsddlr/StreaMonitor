@@ -7,14 +7,14 @@ from litestar.response import Response
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
-_INDEX_MEDIA_TYPE = "text/html"
+_INDEX_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate"}
 
 
 def _serve_index() -> Response:
     index = STATIC_DIR / "index.html"
     if not index.is_file():
         raise NotFoundException(detail="Frontend not built. Run: cd frontend && npm run build")
-    return Response(content=index.read_bytes(), media_type=_INDEX_MEDIA_TYPE)
+    return Response(content=index.read_bytes(), media_type="text/html", headers=_INDEX_HEADERS)
 
 
 @get("/", include_in_schema=False)
