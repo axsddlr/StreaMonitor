@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from litestar import get
+from litestar import Request, get
 from litestar.controller import Controller
 
 from streamonitor.bot import Bot, LOADED_SITES
@@ -11,7 +11,7 @@ from streamonitor.managers.httpmanager_v2.auth import generate_token
 from parameters import WEBSERVER_PASSWORD
 
 
-def _manager(request):
+def _manager(request: Request):
     return request.app.state.manager
 
 
@@ -24,8 +24,7 @@ class SystemController(Controller):
         return asdict(disk_space_dto())
 
     @get("/settings")
-    async def get_settings(self, request) -> dict:
-        manager = _manager(request)
+    async def get_settings(self, request: Request) -> dict:
         sites = {site.siteslug: site.site for site in LOADED_SITES}
         statuses = {status.value: Bot.status_messages[status] for status in Status}
         return {
@@ -34,7 +33,7 @@ class SystemController(Controller):
         }
 
     @get("/command")
-    async def exec_command(self, request, command: str = "") -> dict:
+    async def exec_command(self, request: Request, command: str = "") -> dict:
         manager = _manager(request)
         result = manager.execCmd(command)
         return {"result": result}
@@ -44,7 +43,7 @@ class AuthController(Controller):
     path = "/api/v1/auth"
 
     @get("/login")
-    async def login(self, request) -> dict:
+    async def login(self, request: Request) -> dict:
         """Validate credentials (basic auth) and return a bearer token."""
         import base64
         import secrets as _secrets
@@ -77,13 +76,13 @@ class LegacyController(Controller):
     guards = [auth_guard]
 
     @get("/basesettings")
-    async def base_settings(self, request) -> dict:
+    async def base_settings(self, request: Request) -> dict:
         sites = {site.siteslug: site.site for site in LOADED_SITES}
         statuses = {status.value: Bot.status_messages[status] for status in Status}
         return {"sites": sites, "status": statuses}
 
     @get("/data")
-    async def data(self, request) -> dict:
+    async def data(self, request: Request) -> dict:
         manager = _manager(request)
         from streamonitor.utils.human_file_size import human_file_size
         from streamonitor.managers.outofspace_detector import OOSDetector
@@ -109,6 +108,6 @@ class LegacyController(Controller):
         }
 
     @get("/command")
-    async def command(self, request, command: str = "") -> str:
+    async def command(self, request: Request, command: str = "") -> str:
         manager = _manager(request)
         return manager.execCmd(command) or ""
