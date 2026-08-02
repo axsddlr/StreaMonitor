@@ -68,7 +68,9 @@ async def auth_guard(connection: ASGIConnection, handler: BaseRouteHandler) -> N
     if token_param and validate_token(token_param):
         return
 
-    raise NotAuthorizedException(
-        detail="Unauthorized",
-        headers={"WWW-Authenticate": 'Basic realm="StreaMonitor"'},
-    )
+    # Note: deliberately NO "WWW-Authenticate: Basic" header on the 401.
+    # The browser shows a native basic-auth popup for any same-origin request
+    # that returns 401 with that header, and this app does auth through its
+    # own React login page (basic auth only to exchange for a bearer token),
+    # so the header just causes an unstoppable native popup loop.
+    raise NotAuthorizedException(detail="Unauthorized")

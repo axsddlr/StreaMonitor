@@ -64,10 +64,10 @@ class AuthController(Controller):
             except Exception:
                 pass
 
-        raise NotAuthorizedException(
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": 'Basic realm="StreaMonitor"'},
-        )
+        # No WWW-Authenticate header (see auth.auth_guard): it would make the
+        # browser pop a native basic-auth dialog that loops against our custom
+        # login page.
+        raise NotAuthorizedException(detail="Invalid credentials")
 
 
 # Legacy compat routes
