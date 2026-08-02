@@ -1,7 +1,6 @@
 requests
 terminaltables
 pyzmq
-flask
 litestar[standard]
 uvicorn[standard]
 termcolor

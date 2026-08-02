@@ -65,28 +65,6 @@ SEGMENT_TIME = env.str("STRMNTR_SEGMENT_TIME", None)
 WEBSERVER_HOST = env.str("STRMNTR_HOST", "127.0.0.1")
 WEBSERVER_PORT = env.int("STRMNTR_PORT", 5000)
 
-# Web UI skin
-# Available options:
-# - kseen715 - 2nd skin, currently broken
-# - truck-kun (default) - 3rd skin, row oriented
-# - shaftoverflow - 4th skin, card layout, links in menus
-WEBSERVER_SKIN = env.str("STRMNTR_SKIN", "truck-kun")
-
-# set frequency in seconds of how often the streamer list will update
-WEB_LIST_FREQUENCY = env.int("STRMNTR_LIST_FREQ", 30)
-
-# set frequency in seconds of how often the streamer's status will update on the recording page
-WEB_STATUS_FREQUENCY = env.int("STRMNTR_STATUS_FREQ", 5)
-
-# set theater_mode
-WEB_THEATER_MODE = env.bool("STRMNTR_THEATER_MODE", False)
-
-# confirm deletes, default to mobile-only.
-# set to empty string to disable
-# set to "MOBILE" to explicitly confirm deletes only on mobile
-# set to any other non-falsy value to always check
-WEB_CONFIRM_DELETES = env.str("STRMNTR_CONFIRM_DEL", "MOBILE")
-
 # Password for the web server
 # If empty no auth required, else username admin and choosen password
 WEBSERVER_PASSWORD = env.str("STRMNTR_PASSWORD", "admin")

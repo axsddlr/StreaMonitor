@@ -13,17 +13,6 @@ services:
       # keep all mutable state in the mounted data directory
       STRMNTR_CONFIG: '/app/data/config.json'
       STRMNTR_MOUFLON_KEYS: '/app/data/stripchat_mouflon_keys.json'
-      # change confirm delete behavior: disable
-      #STRMNTR_CONFIRM_DEL: ""
-      # change confirm delete behavior: always-on
-      #STRMNTR_CONFIRM_DEL: "True"
-      STRMNTR_CONFIRM_DEL: "MOBILE"
-      # enable theater mode
-      #STRMNTR_THEATER_MODE: "True
-      # set refresh frequency on streamer page
-      STRMNTR_STATUS_FREQ: "5"
-      # set refresh frequency on list page
-      STRMNTR_LIST_FREQ: "30"
     volumes:
       - ./downloads:/app/downloads
       - ./data:/app/data

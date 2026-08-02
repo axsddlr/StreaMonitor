@@ -369,17 +369,6 @@ class TestStreamateStatusValueError:
             Status(999)
 
 
-class TestWebStatusLookupMissingLongOffline:
-    """BUG: status_mappers.py:4-14 — LONG_OFFLINE missing from web_status_lookup."""
-
-    def test_long_offline_not_in_web_lookup(self):
-        """Fix verified: LONG_OFFLINE is now in web_status_lookup."""
-        from streamonitor.enums.status import Status
-        from streamonitor.managers.httpmanager.mappers.status_mappers import web_status_lookup
-        assert Status.LONG_OFFLINE in web_status_lookup, \
-            "Fix verified: LONG_OFFLINE added to web_status_lookup"
-
-
 class TestXloveCamNetworkInInit:
     """BUG: xlovecam.py:12,26 — synchronous network call (requests.post) in
     __init__, triggered from config loading path. Blocks startup if site down."""

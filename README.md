@@ -32,20 +32,13 @@ A Python 3 application for monitoring and saving live streams from various websi
 
 ### Option A: Docker (recommended)
 
-1. Create the required files if they don't exist:
-
-```bash
-echo '[]' > config.json
-echo '{}' > stripchat_mouflon_keys.json
-```
-
-2. Start the container:
+1. Start the container (config files are auto-created on first run under `./data`):
 
 ```bash
 docker-compose up -d
 ```
 
-3. Open the web UI at `http://localhost:5000`. Default password: `admin`.
+2. Open the web UI at `http://localhost:5000`. Default password: `admin`.
 
 To stop: `docker-compose down`
 
@@ -159,10 +152,14 @@ All settings can be set via environment variables or a `.env` file in the projec
 | Variable | Default | Description |
 |---|---|---|
 | `STRMNTR_DOWNLOAD_DIR` | `downloads` | Output folder for recordings |
+| `STRMNTR_CONFIG` | `config.json` | Path to the streamer list config file |
+| `STRMNTR_MOUFLON_KEYS` | `stripchat_mouflon_keys.json` | Path to the StripChat decryption keys file |
 | `STRMNTR_MIN_FREE_SPACE` | `5.0` | Stop recording when disk free % drops below this |
+| `STRMNTR_MIN_FREE_SPACE_GB` | `0` | Stop recording when disk free space (GB) drops below this (`0` = disabled) |
 | `STRMNTR_RESOLUTION` | `1080` | Target stream height in pixels |
 | `STRMNTR_RESOLUTION_PREF` | `closest` | How to pick resolution: `exact`, `exact_or_least_higher`, `exact_or_highest_lower`, `closest` |
 | `STRMNTR_CONTAINER` | `mp4` | Output container (`mp4` or `mkv`) |
+| `STRMNTR_VR_FORMAT_SUFFIX` | `True` | Add an auto-generated VR format suffix to filenames |
 | `STRMNTR_FFMPEG_PATH` | `ffmpeg` | Path to the ffmpeg binary |
 | `STRMNTR_FFMPEG_READRATE` | `1.3` | ffmpeg `-readrate` value |
 | `STRMNTR_SEGMENT_TIME` | *(none)* | Split recordings: seconds or `hh:mm:ss` (e.g. `3600` or `1:00:00`) |
@@ -170,6 +167,7 @@ All settings can be set via environment variables or a `.env` file in the projec
 | `STRMNTR_PORT` | `5000` | Web server port |
 | `STRMNTR_PASSWORD` | `admin` | Web UI password (set to empty string to disable auth) |
 | `STRMNTR_DEBUG` | `False` | Enable verbose logging and ffmpeg stderr output |
+| `STRMNTR_USER_AGENT` | *(Firefox UA string)* | HTTP User-Agent used by most sites (CamSoda ignores this) |
 
 ## StripChat Setup
 
@@ -181,15 +179,14 @@ The `docker-compose.yml` includes the most common configuration options as comme
 
 ```yaml
 environment:
-  STRMNTR_HOST: '0.0.0.0'          # required to access UI from outside the container
-  STRMNTR_PASSWORD: 'mysecret'      # change the default password
-  STRMNTR_STATUS_FREQ: "5"          # recording page status refresh interval (seconds)
-  STRMNTR_LIST_FREQ: "30"           # main page streamer list refresh interval (seconds)
+  STRMNTR_HOST: '0.0.0.0'                            # required to access UI from outside the container
+  STRMNTR_PASSWORD: 'mysecret'                        # change the default password
+  STRMNTR_CONFIG: '/app/data/config.json'             # streamer list, kept in the mounted data dir
+  STRMNTR_MOUFLON_KEYS: '/app/data/stripchat_mouflon_keys.json'
 
 volumes:
-  - ./downloads:/app/downloads               # where recordings are stored on the host
-  - ./config.json:/app/config.json           # streamer list (persistent)
-  - ./stripchat_mouflon_keys.json:/app/stripchat_mouflon_keys.json
+  - ./downloads:/app/downloads    # where recordings are stored on the host
+  - ./data:/app/data              # config.json + stripchat_mouflon_keys.json (auto-created on first run)
 
 ports:
   - '5000:5000'
