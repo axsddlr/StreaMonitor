@@ -44,8 +44,15 @@ def _check_bearer_token(authorization: str | None) -> bool:
     return validate_token(token)
 
 
-def auth_guard(connection: ASGIConnection, handler: BaseRouteHandler) -> None:
-    """Litestar guard: allows if no password set, or valid basic/bearer auth."""
+async def auth_guard(connection: ASGIConnection, handler: BaseRouteHandler) -> None:
+    """Litestar guard: allows if no password set, or valid basic/bearer auth.
+
+    Async (not sync) deliberately: sync guards run inside a thread pool via
+    sync_to_thread, and exceptions raised there were observed to escape the
+    exception middleware under a live uvicorn server (returning 500 instead
+    of 401). This guard does no blocking I/O, so running it on the event
+    loop keeps NotAuthorizedException mapping intact.
+    """
     if not WEBSERVER_PASSWORD:
         return
 
