@@ -21,11 +21,14 @@ class HTTPManager(Manager):
         uvicorn_log_config = uvicorn.config.LOGGING_CONFIG.copy()
         uvicorn_log_config["loggers"]["uvicorn.access"]["level"] = "WARNING"
 
-        uvicorn.run(
+        config = uvicorn.Config(
             app,
             host=WEBSERVER_HOST,
             port=WEBSERVER_PORT,
             log_config=uvicorn_log_config,
-            # Required when running inside a non-main thread
-            install_signal_handlers=False,
         )
+        server = uvicorn.Server(config)
+        # Server.serve() only installs signal handlers when running in the
+        # main thread (uvicorn's capture_signals() no-ops otherwise), so this
+        # is safe to run from a manager daemon thread.
+        server.run()
