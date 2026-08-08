@@ -27,15 +27,24 @@ def getVideoFfmpeg(self, url, filename):
     if FFMPEG_READRATE:
         cmd.extend(['-readrate', f'{FFMPEG_READRATE!s}'])
 
+    reconnect_opts = [
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_delay_max', '10',
+    ]
+
     if isinstance(url, tuple):
         video_url, audio_url = url
-        cmd.extend(['-i', video_url, '-i', audio_url])
+        cmd.extend(reconnect_opts + ['-i', video_url])
+        cmd.extend(reconnect_opts + ['-i', audio_url])
         cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0', '-movflags', '+frag_keyframe+empty_moov'])
     else:
-        cmd.extend([
+        cmd.extend(reconnect_opts + [
             '-max_reload', '20',
             '-seg_max_retry', '20',
             '-m3u8_hold_counters', '20',
+            '-live_start_index', '-1',
             '-i', url,
             '-c:a', 'copy',
             '-c:v', 'copy',

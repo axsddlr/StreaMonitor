@@ -106,13 +106,17 @@ class Chaturbate(Bot):
         data = {"room_slug": self.username, "bandwidth": "high"}
 
         try:
-            r = requests.post("https://chaturbate.com/get_edge_hls_url_ajax/", headers=headers, data=data)
-            self.lastInfo = r.json()
-            status = self._parseStatus(self.lastInfo['room_status'])
-            if status == status.PUBLIC and not self.lastInfo['url']:
-                status = status.RESTRICTED
-        except Exception:
-            status = Status.RATELIMIT
+            r = requests.post("https://chaturbate.com/get_edge_hls_url_ajax/", headers=headers, data=data, timeout=10)
+            if r.status_code == 429:
+                status = Status.RATELIMIT
+            else:
+                self.lastInfo = r.json()
+                status = self._parseStatus(self.lastInfo['room_status'])
+                if status == status.PUBLIC and not self.lastInfo['url']:
+                    status = status.RESTRICTED
+        except Exception as e:
+            self.logger.warning(f'getStatus request failed: {e}')
+            status = Status.ERROR
 
         self.ratelimit = status == Status.RATELIMIT
         return status

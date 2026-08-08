@@ -1,6 +1,7 @@
 services:
   streamonitor:
-    image: ghcr.io/axsddlr/streamonitor:enhanced
+    # image: ghcr.io/axsddlr/streamonitor:enhanced
+    build: .
 
     restart: unless-stopped
     environment:
