@@ -48,6 +48,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     } catch {
       // ignore json parse errors on error responses
     }
+    if (response.status === 401 && token) {
+      setToken(null)
+      window.location.href = '/login'
+    }
     throw new Error(errorMessage)
   }
 

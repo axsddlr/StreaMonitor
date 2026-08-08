@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { DiskSpaceDTO, StreamerDTO, WebSocketMessage } from '@/lib/types'
+import { setToken } from '@/api/client'
 
 const INITIAL_RECONNECT_DELAY = 1000
 const MAX_RECONNECT_DELAY = 30000
@@ -52,11 +53,37 @@ export function useWebSocket(token: string | null): UseWebSocketReturn {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event: CloseEvent) => {
       if (!isMountedRef.current) return
       setConnected(false)
       wsRef.current = null
 
+      // The auth guard rejects a bad/stale token before the WS handshake
+      // completes (HTTP 401/403), which the browser only ever surfaces as a
+      // generic abnormal close (code 1006) — there's no clean 4001 to check.
+      // Retrying forever with the same dead token just spams reconnects, so
+      // once the token is known-bad, confirm via a REST call and force
+      // re-login instead of continuing the backoff loop.
+      if (event.code === 1006 && token) {
+        void fetch(`/api/v1/system/settings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+          if (res.status === 401 || res.status === 403) {
+            setToken(null)
+            window.location.href = '/login'
+          } else if (isMountedRef.current) {
+            scheduleReconnect()
+          }
+        }).catch(() => {
+          if (isMountedRef.current) scheduleReconnect()
+        })
+        return
+      }
+
+      scheduleReconnect()
+    }
+
+    function scheduleReconnect(): void {
       const delay = reconnectDelayRef.current
       reconnectDelayRef.current = Math.min(
         delay * RECONNECT_MULTIPLIER,
