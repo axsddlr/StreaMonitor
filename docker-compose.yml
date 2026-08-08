@@ -5,15 +5,18 @@ services:
 
     restart: unless-stopped
     environment:
-      # set timzeone
-      #TZ: Etc/UTC
-      # unset password (admin by default)
-      #STRMNTR_PASSWORD: ''
-      # unbind web interface (bound to 127.0.0.1 by default)
-      STRMNTR_HOST: '0.0.0.0'
+      # set timezone
+      TZ: ${TZ}
+      # web UI password (username: admin); empty = no auth
+      STRMNTR_PASSWORD: ${STRMNTR_PASSWORD}
+      # unbind web interface (bound to 127.0.0.1 by default outside docker)
+      STRMNTR_HOST: ${STRMNTR_HOST}
       # keep all mutable state in the mounted data directory
-      STRMNTR_CONFIG: '/app/data/config.json'
-      STRMNTR_MOUFLON_KEYS: '/app/data/stripchat_mouflon_keys.json'
+      STRMNTR_CONFIG: ${STRMNTR_CONFIG}
+      STRMNTR_MOUFLON_KEYS: ${STRMNTR_MOUFLON_KEYS}
+      # enable debug logging (writes ffmpeg .stderr.log next to recordings)
+      STRMNTR_DEBUG: ${STRMNTR_DEBUG}
+      STRMNTR_MIN_FREE_SPACE_GB: ${STRMNTR_MIN_FREE_SPACE_GB}
     volumes:
       - ./downloads:/app/downloads
       - ./data:/app/data
