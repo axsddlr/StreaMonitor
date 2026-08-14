@@ -11,6 +11,7 @@ class Chaturbate(Bot):
     site = 'Chaturbate'
     siteslug = 'CB'
     bulk_update = True
+    video_url_timeout = 20 * 60
 
     _GENDER_MAP = {
         'f': Gender.FEMALE,

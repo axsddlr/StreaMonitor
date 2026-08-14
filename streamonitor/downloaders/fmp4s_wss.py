@@ -77,7 +77,9 @@ def getVideoWSSVR(self, url, filename):
     try:
         stdout = open(filename + '.postprocess_stdout.log', 'w+') if DEBUG else subprocess.DEVNULL
         stderr = open(filename + '.postprocess_stderr.log', 'w+') if DEBUG else subprocess.DEVNULL
-        output_str = '-c:a copy -c:v copy -movflags +frag_keyframe+empty_moov'
+        output_str = '-c:a copy -c:v copy'
+        if CONTAINER == 'mp4':
+            output_str += ' -movflags +frag_keyframe+empty_moov'
         if SEGMENT_TIME is not None:
             output_str += f' -f segment -reset_timestamps 1 -segment_time {str(SEGMENT_TIME)}'
             filename = basefilename + '_%03d' + suffix + '.' + CONTAINER

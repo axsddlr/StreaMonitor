@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import os
+import subprocess
 import traceback
 from enum import Enum
 from urllib.parse import urljoin
@@ -14,7 +15,7 @@ import requests.cookies
 
 from streamonitor.enums import Status, COUNTRIES, Gender, GENDER_DATA
 import streamonitor.log as log
-from parameters import DOWNLOADS_DIR, DEBUG, WANTED_RESOLUTION, WANTED_RESOLUTION_PREFERENCE, CONTAINER, HTTP_USER_AGENT
+from parameters import DOWNLOADS_DIR, DEBUG, WANTED_RESOLUTION, WANTED_RESOLUTION_PREFERENCE, CONTAINER, HTTP_USER_AGENT, FFMPEG_PATH
 from streamonitor.downloaders.ffmpeg import getVideoFfmpeg
 from streamonitor.models import VideoData
 
@@ -34,6 +35,7 @@ class Bot(Thread):
     sleep_on_error = 20
     sleep_on_ratelimit = 180
     long_offline_timeout = 600
+    video_url_timeout = None
 
     headers = {
         "User-Agent": HTTP_USER_AGENT
@@ -82,6 +84,7 @@ class Bot(Thread):
         self._video_files_lock = Lock()
         self.video_files = []
         self.video_files_total_size = 0
+        self.record_parts = []
         self.cache_file_list()
 
         self.gender = None
@@ -184,6 +187,7 @@ class Bot(Thread):
                 return
 
     def run(self):
+        self._recover_interrupted_recording()
         while not self.quitting:
             while not self.running and not self.quitting:
                 sleep(1)
@@ -240,6 +244,9 @@ class Bot(Thread):
                             self.log('Started downloading show')
                             self.recording = True
                             file = self.genOutFilename()
+                            if self.video_url_timeout:
+                                self.record_parts.append(file)
+                                self._write_parts_manifest()
                             try:
                                 ret = self.getVideo(self, video_url, file)
                             except Exception as e:
@@ -247,6 +254,9 @@ class Bot(Thread):
                                 ret = False
                             if not ret:
                                 self.log('Recording ended with error')
+                                if self.video_url_timeout and self.record_parts and self.record_parts[-1] == file:
+                                    self.record_parts.pop()
+                                    self._write_parts_manifest()
                                 self.sc = Status.ERROR
                                 self.log(self.status())
                                 self._sleep(self.sleep_on_error)
@@ -268,6 +278,9 @@ class Bot(Thread):
                     self._sleep(self.sleep_on_error)
                     continue
 
+                if self.sc in (Status.OFFLINE, Status.LONG_OFFLINE, Status.PRIVATE):
+                    self._merge_record_parts()
+
                 if self.quitting:
                     break
                 elif self.bulk_update:
@@ -282,6 +295,7 @@ class Bot(Thread):
                     self._sleep(self.sleep_on_offline)
 
             self.sc = Status.NOTRUNNING
+            self._merge_record_parts()
             self.log("Stopped")
 
     def setStatus(self, sc):
@@ -399,6 +413,79 @@ class Bot(Thread):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         filename = os.path.join(folder, f'{self.username}-{timestamp}.{CONTAINER}')
         return filename
+
+    @property
+    def _parts_manifest(self):
+        return os.path.join(self.outputFolder, '.parts.txt')
+
+    def _write_parts_manifest(self):
+        try:
+            os.makedirs(self.outputFolder, exist_ok=True)
+            with open(self._parts_manifest, 'w', encoding='utf-8') as f:
+                for p in self.record_parts:
+                    f.write(p + '\n')
+        except Exception:
+            pass
+
+    def _clear_parts_manifest(self):
+        try:
+            os.remove(self._parts_manifest)
+        except OSError:
+            pass
+
+    def _recover_interrupted_recording(self):
+        if not self.video_url_timeout:
+            return
+        if not os.path.exists(self._parts_manifest):
+            return
+        try:
+            with open(self._parts_manifest, 'r', encoding='utf-8') as f:
+                parts = [line.strip() for line in f if line.strip()]
+            if parts:
+                self.log(f'Recovering {len(parts)} recording parts from an interrupted session')
+                self.record_parts = parts
+                self._merge_record_parts()
+        except Exception as e:
+            self.logger.warning(f'Failed to recover interrupted recording: {e}')
+
+    def _merge_record_parts(self):
+        parts = self.record_parts
+        self.record_parts = []
+        if len(parts) <= 1:
+            self._clear_parts_manifest()
+            return
+        final = parts[0]
+        tmp = final + '.tmp'
+        listfile = final + '.concat.txt'
+        movflags = ['-movflags', '+frag_keyframe+empty_moov'] if CONTAINER == 'mp4' else []
+        try:
+            with open(listfile, 'w', encoding='utf-8') as f:
+                for p in parts:
+                    f.write("file '" + p.replace("'", "'\\''") + "'\n")
+            self.log(f'Merging {len(parts)} recording parts into a single file')
+            subprocess.run(
+                [FFMPEG_PATH, '-y', '-hide_banner', '-loglevel', 'error',
+                 '-f', 'concat', '-safe', '0', '-i', listfile,
+                 '-c', 'copy'] + movflags + [tmp],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+                os.replace(tmp, final)
+                for p in parts[1:]:
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+                self.log('Recording saved to ' + final)
+            else:
+                self.logger.warning('Merge produced no output, keeping individual parts')
+            self._clear_parts_manifest()
+        except Exception as e:
+            self.logger.warning(f'Failed to merge recording parts: {e}')
+        finally:
+            try:
+                os.remove(listfile)
+            except OSError:
+                pass
 
     @classmethod
     def fromConfig(cls, data):

@@ -7,6 +7,8 @@ import requests.cookies
 from threading import Thread
 from parameters import DEBUG, SEGMENT_TIME, CONTAINER, FFMPEG_PATH, FFMPEG_READRATE
 
+MOVFLAGS = ['-movflags', '+frag_keyframe+empty_moov'] if CONTAINER == 'mp4' else []
+
 
 def getVideoFfmpeg(self, url, filename):
     cmd = [
@@ -38,7 +40,7 @@ def getVideoFfmpeg(self, url, filename):
         video_url, audio_url = url
         cmd.extend(reconnect_opts + ['-i', video_url])
         cmd.extend(reconnect_opts + ['-i', audio_url])
-        cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0', '-movflags', '+frag_keyframe+empty_moov'])
+        cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0'] + MOVFLAGS)
     else:
         cmd.extend(reconnect_opts + [
             '-max_reload', '20',
@@ -48,8 +50,11 @@ def getVideoFfmpeg(self, url, filename):
             '-i', url,
             '-c:a', 'copy',
             '-c:v', 'copy',
-            '-movflags', '+frag_keyframe+empty_moov',
-        ])
+        ] + MOVFLAGS)
+
+    timeout = getattr(self, 'video_url_timeout', None)
+    if timeout:
+        cmd.extend(['-t', str(timeout)])
 
     suffix = ''
     if hasattr(self, 'filename_extra_suffix'):
@@ -62,9 +67,7 @@ def getVideoFfmpeg(self, url, filename):
             '-reset_timestamps', '1',
             '-segment_time', str(SEGMENT_TIME),
             '-strftime', '1',
-            '-movflags', '+frag_keyframe+empty_moov',
-            f'{username}-%Y%m%d-%H%M%S{suffix}.{CONTAINER}'
-        ])
+        ] + MOVFLAGS + [f'{username}-%Y%m%d-%H%M%S{suffix}.{CONTAINER}'])
     else:
         cmd.extend([
             os.path.splitext(filename)[0] + suffix + '.' + CONTAINER
