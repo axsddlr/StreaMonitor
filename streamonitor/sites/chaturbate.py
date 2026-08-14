@@ -1,4 +1,6 @@
 import re
+import time
+import threading
 import m3u8
 import requests
 from urllib.parse import urljoin
@@ -12,6 +14,10 @@ class Chaturbate(Bot):
     siteslug = 'CB'
     bulk_update = True
     video_url_timeout = 20 * 60
+
+    EDGE_MIN_INTERVAL = 1.0
+    _edge_lock = threading.Lock()
+    _edge_last_call = 0.0
 
     _GENDER_MAP = {
         'f': Gender.FEMALE,
@@ -31,14 +37,17 @@ class Chaturbate(Bot):
     def __init__(self, username):
         super().__init__(username)
         self.sleep_on_offline = 30
-        self.sleep_on_error = 60
+        self.sleep_on_error = 20
+        self._url_fetched_at = 0.0
     
     def getWebsiteURL(self):
         return "https://www.chaturbate.com/" + self.username
     
     def getVideoUrl(self):
         if self.bulk_update:
-            self.getStatus()
+            url_age = time.time() - self._url_fetched_at
+            if not self.lastInfo.get('url') or url_age >= self.video_url_timeout:
+                self.getStatus()
         url = self.lastInfo['url']
         if not url:
             return None
@@ -107,11 +116,17 @@ class Chaturbate(Bot):
         data = {"room_slug": self.username, "bandwidth": "high"}
 
         try:
+            with Chaturbate._edge_lock:
+                wait = Chaturbate.EDGE_MIN_INTERVAL - (time.time() - Chaturbate._edge_last_call)
+                if wait > 0:
+                    time.sleep(wait)
+                Chaturbate._edge_last_call = time.time()
             r = requests.post("https://chaturbate.com/get_edge_hls_url_ajax/", headers=headers, data=data, timeout=10)
             if r.status_code == 429:
                 status = Status.RATELIMIT
             else:
                 self.lastInfo = r.json()
+                self._url_fetched_at = time.time()
                 status = self._parseStatus(self.lastInfo['room_status'])
                 if status == status.PUBLIC and not self.lastInfo['url']:
                     status = status.RESTRICTED
