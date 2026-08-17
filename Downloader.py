@@ -1,5 +1,4 @@
 import os
-import sys
 import streamonitor.config as config
 from streamonitor.managers.bulk_status_manager import BulkStatusManager
 from streamonitor.managers.httpmanager_v2 import HTTPManager
@@ -20,8 +19,10 @@ def is_docker():
 
 def main():
     if not OOSDetector.disk_space_good():
-        print(OOSDetector.under_threshold_message)
-        sys.exit(1)
+        # Don't exit: OOSDetector pauses downloads while space is low and
+        # resumes them automatically once it recovers. The container should
+        # stay up (web UI, monitoring) even when the disk is full.
+        print(OOSDetector.under_threshold_message + " Continuing; downloads will be paused until disk space recovers.")
 
     streamers = config.loadStreamers()
 
