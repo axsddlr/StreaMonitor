@@ -20,14 +20,14 @@ class Logger(object):
         logger.addHandler(self.handler)
         return logger
 
-    def debug(self, msg):
-        self.logger.debug(msg)
+    def debug(self, msg, *args):
+        self.logger.debug(msg, *args)
 
-    def warning(self, msg):
-        self.logger.warning(msg)
+    def warning(self, msg, *args):
+        self.logger.warning(msg, *args)
 
-    def error(self, msg):
-        self.logger.error(msg)
+    def error(self, msg, *args):
+        self.logger.error(msg, *args)
 
-    def info(self, msg):
-        self.logger.info(msg)
+    def info(self, msg, *args):
+        self.logger.info(msg, *args)
