@@ -20,6 +20,8 @@ def streamer_to_dto(streamer) -> StreamerDTO:
         country_name=streamer.country_data.get('name', ''),
         video_count=len(streamer.video_files),
         video_total_size=streamer.video_files_total_size,
+        cookies_path=getattr(streamer, 'cookies_path', None),
+        supports_cookies=hasattr(streamer, 'setCookiesPath'),
     )
 
 

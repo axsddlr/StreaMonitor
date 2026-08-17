@@ -21,6 +21,12 @@ class Manager(Thread):
 
     def execCmd(self, line):
         parts = str(line).split(' ')
+        if parts[0] == 'cookies':
+            username = parts[1] if len(parts) > 1 else ""
+            site = parts[2] if len(parts) > 2 else ""
+            path = ' '.join(parts[3:]) if len(parts) > 3 else ""
+            streamer = self.getStreamer(username, site)
+            return self.do_cookies(streamer, username, site, path)
         if 'do_' + parts[0] not in dir(self):
             return 'Unknown command'
 
@@ -131,6 +137,23 @@ class Manager(Thread):
             return "Streamer not found"
         self.do_stop(streamer, username, site)
         return self.do_start(streamer, username, site)
+
+    def do_cookies(self, streamer, username, site, path):
+        if not streamer:
+            return "Streamer not found"
+        if not hasattr(streamer, 'setCookiesPath'):
+            return f"Cookies are not supported for {streamer.site}"
+        try:
+            if path:
+                streamer.setCookiesPath(path)
+                self.saveConfig()
+                return f"Cookies set for {streamer.username} ({streamer.site})"
+            else:
+                streamer.setCookiesPath(None)
+                self.saveConfig()
+                return f"Cookies cleared for {streamer.username} ({streamer.site})"
+        except Exception as e:
+            return f"Failed to set cookies: {e}"
         
     def do_status(self, streamer, username, site):
         output = [["Username", "Site", "Started", "Status"]]

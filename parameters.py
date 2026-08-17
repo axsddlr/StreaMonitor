@@ -10,6 +10,9 @@ if os.path.exists('.env'):
 DOWNLOADS_DIR = env.str("STRMNTR_DOWNLOAD_DIR", "downloads")
 CONFIG_PATH = env.str("STRMNTR_CONFIG", "config.json")
 MOUFLON_KEYS_PATH = env.str("STRMNTR_MOUFLON_KEYS", "stripchat_mouflon_keys.json")
+COOKIES_DIR = env.str("STRMNTR_COOKIES_DIR", None)
+if COOKIES_DIR is None:
+    COOKIES_DIR = os.path.join(os.path.dirname(os.path.abspath(CONFIG_PATH)), "cookies")
 MIN_FREE_DISK_PERCENT = env.float("STRMNTR_MIN_FREE_SPACE", 5.0)  # in %
 MIN_FREE_DISK_GB = env.float("STRMNTR_MIN_FREE_SPACE_GB", 0)  # in GB, 0 = disabled
 DEBUG = env.bool("STRMNTR_DEBUG", False)

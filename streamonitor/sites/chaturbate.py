@@ -6,6 +6,7 @@ import requests
 from urllib.parse import urljoin
 from streamonitor.bot import Bot
 from streamonitor.enums import Status, Gender
+from streamonitor.utils.cookies import load_cookies_from_netscape
 from parameters import WANTED_RESOLUTION, WANTED_RESOLUTION_PREFERENCE
 
 
@@ -34,11 +35,28 @@ class Chaturbate(Bot):
         except Exception:
             return False
 
-    def __init__(self, username):
+    def __init__(self, username, cookies_path=None):
         super().__init__(username)
         self.sleep_on_offline = 30
         self.sleep_on_error = 20
         self._url_fetched_at = 0.0
+        self.cookies_path = None
+        if cookies_path:
+            self.setCookiesPath(cookies_path)
+
+    def setCookiesPath(self, path):
+        self.cookies_path = path
+        if path:
+            jar = load_cookies_from_netscape(path)
+            self.cookies = jar
+            self.session.cookies.update(jar)
+            self.bulk_update = False
+            self.record_private = True
+        else:
+            self.cookies = None
+            self.session.cookies.clear()
+            self.bulk_update = True
+            self.record_private = False
     
     def getWebsiteURL(self):
         return "https://www.chaturbate.com/" + self.username
@@ -121,7 +139,7 @@ class Chaturbate(Bot):
                 if wait > 0:
                     time.sleep(wait)
                 Chaturbate._edge_last_call = time.time()
-            r = requests.post("https://chaturbate.com/get_edge_hls_url_ajax/", headers=headers, data=data, timeout=10)
+            r = self.session.post("https://chaturbate.com/get_edge_hls_url_ajax/", headers=headers, data=data, timeout=10)
             if r.status_code == 429:
                 status = Status.RATELIMIT
             else:
@@ -136,6 +154,20 @@ class Chaturbate(Bot):
 
         self.ratelimit = status == Status.RATELIMIT
         return status
+
+    @classmethod
+    def fromConfig(cls, data):
+        instance = super().fromConfig(data)
+        cookies_path = data.get('cookies_path')
+        if cookies_path:
+            instance.setCookiesPath(cookies_path)
+        return instance
+
+    def export(self):
+        data = super().export()
+        if self.cookies_path:
+            data['cookies_path'] = self.cookies_path
+        return data
 
     @classmethod
     def getStatusBulk(cls, streamers, session=None):

@@ -2,10 +2,12 @@ import errno
 import os
 import subprocess
 import sys
+import tempfile
 
 import requests.cookies
 from threading import Thread
 from parameters import DEBUG, SEGMENT_TIME, CONTAINER, FFMPEG_PATH, FFMPEG_READRATE
+from streamonitor.utils.cookies import dump_cookies_to_netscape
 
 MOVFLAGS = ['-movflags', '+frag_keyframe+empty_moov'] if CONTAINER == 'mp4' else []
 
@@ -16,15 +18,12 @@ def getVideoFfmpeg(self, url, filename):
         '-user_agent', self.headers['User-Agent']
     ]
 
-    if type(self.cookies) is requests.cookies.RequestsCookieJar:
-        cookies_text = ''
-        for cookie in self.cookies:
-            cookies_text += cookie.name + "=" + cookie.value + "; path=" + cookie.path + '; domain=' + cookie.domain + '\n'
-        if len(cookies_text) > 10:
-            cookies_text = cookies_text[:-1]
-        cmd.extend([
-            '-cookies', cookies_text
-        ])
+    cookie_file = None
+    if type(self.cookies) is requests.cookies.RequestsCookieJar and len(self.cookies) > 0:
+        cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.cookies.txt', delete=False)
+        dump_cookies_to_netscape(self.cookies, cookie_file.name)
+        cookie_file.close()
+        cmd.extend(['-cookies', cookie_file.name])
 
     if FFMPEG_READRATE:
         cmd.extend(['-readrate', f'{FFMPEG_READRATE!s}'])
@@ -141,4 +140,9 @@ def getVideoFfmpeg(self, url, filename):
     self.stopDownload = lambda: stopping.pls_stop()
     thread.join()
     self.stopDownload = None
+    if cookie_file:
+        try:
+            os.remove(cookie_file.name)
+        except OSError:
+            pass
     return not error

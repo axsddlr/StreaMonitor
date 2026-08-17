@@ -18,6 +18,8 @@ class StreamerDTO:
     country_name: str
     video_count: int
     video_total_size: int
+    cookies_path: Any = None
+    supports_cookies: bool = False
 
 
 @dataclass
@@ -56,3 +58,8 @@ class MessageResponse:
 class AddStreamerRequest:
     username: str
     site: str
+
+
+@dataclass
+class SetCookiesRequest:
+    content: str = ""

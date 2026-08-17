@@ -21,6 +21,7 @@ import {
   Circle,
   Loader2,
   ExternalLink,
+  Cookie,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +40,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { StatusBadge } from './StatusBadge'
+import { CookiesDialog } from './CookiesDialog'
 import { toggleStreamer, removeStreamer } from '@/api/client'
 import { cn, formatBytes } from '@/lib/utils'
 import type { StreamerDTO } from '@/lib/types'
@@ -55,12 +57,19 @@ interface RemoveTarget {
   site: string
 }
 
+interface CookiesTarget {
+  username: string
+  site: string
+  cookies_path: string | null
+}
+
 const columnHelper = createColumnHelper<StreamerDTO>()
 
 export function StreamerTable({ streamers, filters, isLoading = false }: StreamerTableProps) {
   const queryClient = useQueryClient()
   const [sorting, setSorting] = useState<SortingState>([])
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null)
+  const [cookiesTarget, setCookiesTarget] = useState<CookiesTarget | null>(null)
   const [togglingKey, setTogglingKey] = useState<string | null>(null)
 
   const toggleMutation = useMutation({
@@ -277,6 +286,20 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
                     View recordings
                   </Link>
                 </DropdownMenuItem>
+                {row.supports_cookies && (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setCookiesTarget({
+                        username: row.username,
+                        site: row.site,
+                        cookies_path: row.cookies_path,
+                      })
+                    }
+                  >
+                    <Cookie className="h-4 w-4" />
+                    Account cookies
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
@@ -460,6 +483,15 @@ export function StreamerTable({ streamers, filters, isLoading = false }: Streame
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CookiesDialog
+        key={cookiesTarget ? `${cookiesTarget.username}:${cookiesTarget.site}` : 'closed'}
+        open={cookiesTarget !== null}
+        onOpenChange={(open) => !open && setCookiesTarget(null)}
+        username={cookiesTarget?.username ?? ''}
+        site={cookiesTarget?.site ?? ''}
+        cookiesPath={cookiesTarget?.cookies_path ?? null}
+      />
     </>
   )
 }

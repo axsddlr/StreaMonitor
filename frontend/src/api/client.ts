@@ -116,6 +116,13 @@ export async function toggleStreamer(username: string, site: string): Promise<To
   })
 }
 
+export async function setCookies(username: string, site: string, content: string): Promise<{ message: string; cookies_path: string | null }> {
+  return apiFetch<{ message: string; cookies_path: string | null }>(`/api/v1/streamers/${encodeURIComponent(username)}/${encodeURIComponent(site)}/cookies`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  })
+}
+
 export async function startAll(): Promise<ApiResponse> {
   return apiFetch<ApiResponse>('/api/v1/streamers/start-all', {
     method: 'PATCH',

@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import os
 
 from litestar import Request, get, post, delete, patch
 from litestar.controller import Controller
@@ -6,7 +7,8 @@ from litestar.exceptions import NotFoundException, HTTPException
 
 from streamonitor.managers.httpmanager_v2.auth import auth_guard
 from streamonitor.managers.httpmanager_v2.serializers import streamer_to_dto, disk_space_dto
-from streamonitor.managers.httpmanager_v2.schemas import AddStreamerRequest
+from streamonitor.managers.httpmanager_v2.schemas import AddStreamerRequest, SetCookiesRequest
+from parameters import COOKIES_DIR
 
 
 def _manager(request: Request):
@@ -102,6 +104,32 @@ class StreamersController(Controller):
         else:
             res = manager.do_start(streamer, username, site)
         return {"message": res, "running": streamer.running}
+
+    @patch("/{username:str}/{site:str}/cookies")
+    async def set_cookies(self, request: Request, username: str, site: str, data: SetCookiesRequest) -> dict:
+        manager = _manager(request)
+        streamer = manager.getStreamer(username, site)
+        if streamer is None:
+            raise NotFoundException(detail="Streamer not found")
+        if not hasattr(streamer, 'setCookiesPath'):
+            raise HTTPException(status_code=400, detail=f"Cookies are not supported for {streamer.site}")
+
+        content = (data.content or '').strip()
+        if not content:
+            streamer.setCookiesPath(None)
+            manager.saveConfig()
+            return {"message": f"Cookies cleared for {streamer.username}", "cookies_path": None}
+
+        try:
+            os.makedirs(COOKIES_DIR, exist_ok=True)
+            path = os.path.abspath(os.path.join(COOKIES_DIR, f"{streamer.siteslug}-{streamer.username}.txt"))
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content + '\n')
+            streamer.setCookiesPath(path)
+            manager.saveConfig()
+            return {"message": f"Cookies set for {streamer.username}", "cookies_path": path}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to set cookies: {e}")
 
     @patch("/start-all")
     async def start_all(self, request: Request) -> dict:

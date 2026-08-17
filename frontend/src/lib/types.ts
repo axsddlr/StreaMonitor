@@ -13,6 +13,8 @@ export interface StreamerDTO {
   country_name: string
   video_count: number
   video_total_size: number
+  cookies_path: string | null
+  supports_cookies: boolean
 }
 
 export interface RecordingDTO {
