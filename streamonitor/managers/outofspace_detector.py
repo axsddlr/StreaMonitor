@@ -38,11 +38,11 @@ class OOSDetector(Thread):
 
     @staticmethod
     def disk_space_good():
-        if MIN_FREE_DISK_GB > 0 and OOSDetector.free_space_gb() <= MIN_FREE_DISK_GB:
-            return False
-        if OOSDetector.free_space() <= MIN_FREE_DISK_PERCENT:
-            return False
-        return True
+        if MIN_FREE_DISK_GB > 0:
+            # Explicit GB threshold is authoritative; percent floor only
+            # applies when no GB threshold is configured (GB=0/disabled).
+            return OOSDetector.free_space_gb() > MIN_FREE_DISK_GB
+        return OOSDetector.free_space() > MIN_FREE_DISK_PERCENT
 
     @property
     def paused(self):
