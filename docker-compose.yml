@@ -4,6 +4,12 @@ services:
     build: .
 
     restart: unless-stopped
+    # Use public resolvers instead of the Docker embedded DNS to avoid
+    # transient NameResolutionError / flaky CDN connections (e.g. 403s from
+    # edge7-*.live.mmcdn.com after a DNS hiccup).
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       # set timezone
       TZ: ${TZ}
