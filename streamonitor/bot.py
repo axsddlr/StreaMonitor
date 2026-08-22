@@ -258,6 +258,14 @@ class Bot(Thread):
                                 if self.video_url_timeout and self.record_parts and self.record_parts[-1] == file:
                                     self.record_parts.pop()
                                     self._write_parts_manifest()
+                                    # Remove the partial file from the failed
+                                    # part: it's not in the merge list and a
+                                    # dead-session error can leave a huge,
+                                    # unplayable fragment behind.
+                                    try:
+                                        os.remove(file)
+                                    except OSError:
+                                        pass
                                 self.sc = Status.ERROR
                                 self.log(self.status())
                                 self._sleep(self.sleep_on_error)

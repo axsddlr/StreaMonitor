@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 import requests.cookies
 from threading import Thread
@@ -10,6 +11,22 @@ from parameters import DEBUG, SEGMENT_TIME, CONTAINER, FFMPEG_PATH, FFMPEG_READR
 from streamonitor.utils.cookies import dump_cookies_to_netscape
 
 MOVFLAGS = ['-movflags', '+frag_keyframe+empty_moov'] if CONTAINER == 'mp4' else []
+
+# HLS demuxer retry bounds. Without these, a dead edge session token (HTTP
+# 403 from the CDN) makes the protocol layer reconnect-loop for the whole
+# recording instead of failing fast so the bot can fetch a fresh token.
+HLS_OPTS = [
+    '-max_reload', '20',
+    '-seg_max_retry', '20',
+    '-m3u8_hold_counters', '20',
+    '-live_start_index', '-1',
+]
+
+# After this many "403 Forbidden" lines in the stderr log the watchdog
+# terminates ffmpeg early. The bot then refreshes the session token instead
+# of waiting out the (bounded) HLS retry loop. A single transient 403 is
+# tolerated; a dead session produces a flood.
+WATCHDOG_403_THRESHOLD = 3
 
 
 def getVideoFfmpeg(self, url, filename):
@@ -28,24 +45,24 @@ def getVideoFfmpeg(self, url, filename):
     if FFMPEG_READRATE:
         cmd.extend(['-readrate', f'{FFMPEG_READRATE!s}'])
 
+    # Note: no -reconnect_at_eof here. For HLS, the playlist response ending
+    # (EOF) is normal, and reconnecting on EOF makes ffmpeg refetch the whole
+    # playlist on every poll and, once the session dies, spin in a 403 loop
+    # that balloons the stderr log to hundreds of MB. -reconnect 1 +
+    # -reconnect_streamed still recover genuine mid-transfer drops.
     reconnect_opts = [
         '-reconnect', '1',
         '-reconnect_streamed', '1',
-        '-reconnect_at_eof', '1',
         '-reconnect_delay_max', '10',
     ]
 
     if isinstance(url, tuple):
         video_url, audio_url = url
-        cmd.extend(reconnect_opts + ['-i', video_url])
-        cmd.extend(reconnect_opts + ['-i', audio_url])
+        cmd.extend(reconnect_opts + HLS_OPTS + ['-i', video_url])
+        cmd.extend(reconnect_opts + HLS_OPTS + ['-i', audio_url])
         cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0'] + MOVFLAGS)
     else:
-        cmd.extend(reconnect_opts + [
-            '-max_reload', '20',
-            '-seg_max_retry', '20',
-            '-m3u8_hold_counters', '20',
-            '-live_start_index', '-1',
+        cmd.extend(reconnect_opts + HLS_OPTS + [
             '-i', url,
             '-c:a', 'copy',
             '-c:v', 'copy',
@@ -81,13 +98,14 @@ def getVideoFfmpeg(self, url, filename):
 
     stopping = _Stopper()
     error = False
+    stderr_path = filename + '.stderr.log'
 
     def execute():
         nonlocal error
         stderr_handle = None
         process = None
         try:
-            stderr_handle = open(filename + '.stderr.log', 'w') if DEBUG else None
+            stderr_handle = open(stderr_path, 'w') if DEBUG else None
             stderr = stderr_handle if stderr_handle else subprocess.DEVNULL
             startupinfo = None
             if sys.platform == "win32":
@@ -109,6 +127,46 @@ def getVideoFfmpeg(self, url, filename):
             if stderr_handle:
                 stderr_handle.close()
             return
+
+        def watch_stderr():
+            """Kill ffmpeg early when the CDN starts 403ing (dead session token).
+
+            The HLS retry options above already bound ffmpeg's retries, but a
+            dead session still spends minutes retrying before the bot can
+            refresh the token. Watching the stderr log for a flood of 403s
+            lets us fail fast and hand control back to the bot for a fresh
+            token immediately.
+            """
+            if not DEBUG:
+                return
+            forbidden = 0
+            position = 0
+            try:
+                while process.poll() is None and not stopping.stop:
+                    try:
+                        with open(stderr_path, 'r', errors='replace') as f:
+                            f.seek(position)
+                            chunk = f.read()
+                            position = f.tell()
+                            forbidden += chunk.count('403 Forbidden')
+                    except OSError:
+                        pass
+                    if forbidden >= WATCHDOG_403_THRESHOLD:
+                        self.logger.warning('CDN returned 403 repeatedly (session expired?), stopping ffmpeg to refresh token')
+                        # Invalidate the cached edge URL so the next
+                        # getVideoUrl() fetches a fresh session token instead
+                        # of reusing the dead one (chaturbate only refreshes
+                        # on age >= timeout).
+                        if hasattr(self, 'lastInfo') and isinstance(self.lastInfo, dict):
+                            self.lastInfo.pop('url', None)
+                        stopping.pls_stop()
+                        return
+                    time.sleep(1)
+            except Exception:
+                pass
+
+        if DEBUG:
+            Thread(target=watch_stderr, daemon=True).start()
 
         try:
             while process.poll() is None:
@@ -134,6 +192,13 @@ def getVideoFfmpeg(self, url, filename):
         finally:
             if stderr_handle:
                 stderr_handle.close()
+            if not error and DEBUG and os.path.exists(stderr_path):
+                # Only keep the stderr log for failed runs; a clean recording
+                # shouldn't litter the downloads folder with .stderr.log files.
+                try:
+                    os.remove(stderr_path)
+                except OSError:
+                    pass
 
     thread = Thread(target=execute)
     thread.start()
