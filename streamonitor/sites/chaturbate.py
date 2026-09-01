@@ -66,7 +66,7 @@ class Chaturbate(Bot):
             url_age = time.time() - self._url_fetched_at
             if not self.lastInfo.get('url') or url_age >= self.video_url_timeout:
                 self.getStatus()
-        url = self.lastInfo['url']
+        url = self.lastInfo.get('url')
         if not url:
             return None
 
@@ -80,8 +80,24 @@ class Chaturbate(Bot):
         return self.getWantedResolutionPlaylist(url)
 
     def _getCmafPlaylist(self, url):
+        # The edge API now hands out a master playlist (llhls.m3u8?token=<JWE>)
+        # whose JWE token is single-use. Invalidate the cached URL up front so
+        # any retry fetches a fresh token via getStatus() instead of reusing a
+        # consumed one — which 403s and, via the old fallback, fed the master
+        # URL itself to ffmpeg (which can't use it: no session cookies and the
+        # token is spent).
+        self.lastInfo.pop('url', None)
+
         result = self.session.get(url, headers=self.headers)
-        master = m3u8.loads(result.text)
+        if not result.ok:
+            self.logger.warning('Master playlist fetch failed: HTTP %d', result.status_code)
+            return None
+
+        try:
+            master = m3u8.loads(result.text)
+        except Exception as e:
+            self.logger.warning('Master playlist parse failed: %s', e)
+            return None
 
         audio_uris = {}
         for media in master.media:
@@ -101,7 +117,14 @@ class Chaturbate(Bot):
             })
 
         if not variants:
-            return url
+            # A valid media playlist without variants is a direct chunklist
+            # URL (older API format) that ffmpeg can consume as-is. Only treat
+            # it as a failure when the body doesn't look like a playlist at
+            # all (e.g. a 403 error page).
+            if '#EXTINF' in result.text or '#EXT-X-PART' in result.text:
+                return url
+            self.logger.warning('Master playlist contains no variants')
+            return None
 
         for variant in variants:
             w, h = variant['resolution']
