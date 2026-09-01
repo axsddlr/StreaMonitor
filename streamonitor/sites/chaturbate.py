@@ -1,9 +1,10 @@
+import json
 import re
 import time
 import threading
 import m3u8
 import requests
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from streamonitor.bot import Bot
 from streamonitor.enums import Status, Gender
 from streamonitor.utils.cookies import load_cookies_from_netscape
@@ -40,6 +41,8 @@ class Chaturbate(Bot):
         self.sleep_on_offline = 30
         self.sleep_on_error = 20
         self._url_fetched_at = 0.0
+        self._exclude_edge = None
+        self._current_edge = None
         self.cookies_path = None
         if cookies_path:
             self.setCookiesPath(cookies_path)
@@ -70,6 +73,10 @@ class Chaturbate(Bot):
         if not url:
             return None
 
+        # Remember which edge we're recording from so a failure can ask
+        # getStatus() for a different edge next time.
+        self._current_edge = urlparse(url).hostname
+
         if 'llhls.m3u8' in url:
             return self._getCmafPlaylist(url)
 
@@ -91,12 +98,16 @@ class Chaturbate(Bot):
         result = self.session.get(url, headers=self.headers)
         if not result.ok:
             self.logger.warning('Master playlist fetch failed: HTTP %d', result.status_code)
+            # The token may be spent or this edge may be flaky; ask the API
+            # for a different edge on the next getStatus().
+            self._exclude_edge = self._current_edge
             return None
 
         try:
             master = m3u8.loads(result.text)
         except Exception as e:
             self.logger.warning('Master playlist parse failed: %s', e)
+            self._exclude_edge = self._current_edge
             return None
 
         audio_uris = {}
@@ -124,6 +135,7 @@ class Chaturbate(Bot):
             if '#EXTINF' in result.text or '#EXT-X-PART' in result.text:
                 return url
             self.logger.warning('Master playlist contains no variants')
+            self._exclude_edge = self._current_edge
             return None
 
         for variant in variants:
@@ -152,9 +164,38 @@ class Chaturbate(Bot):
         else:
             return Status.OFFLINE
 
+    def _statusFromDossier(self):
+        """Fallback: the room page embeds the stream URL and room status in
+        window.initialRoomDossier, no ajax call needed. Used when
+        get_edge_hls_url_ajax rate-limits (429) or fails, mirroring how the
+        site's own player boots from the server-rendered dossier."""
+        try:
+            r = self.session.get(f"https://chaturbate.com/{self.username}/", timeout=15)
+            m = re.search(r'window\.initialRoomDossier = "((?:\\.|[^"\\])*)"', r.text)
+            if not m:
+                self.logger.warning('Dossier not found in room page')
+                return None
+            raw = m.group(1).encode('utf-8').decode('unicode_escape')
+            dossier = json.loads(raw)
+            status = self._parseStatus(dossier.get('room_status', ''))
+            url = dossier.get('hls_source') or ''
+            if status == Status.PUBLIC and not url:
+                status = Status.RESTRICTED
+            self.lastInfo = {'url': url, 'room_status': dossier.get('room_status', '')}
+            self._url_fetched_at = time.time()
+            return status
+        except Exception as e:
+            self.logger.warning(f'Dossier fallback failed: {e}')
+            return None
+
     def getStatus(self):
         headers = {"X-Requested-With": "XMLHttpRequest"}
         data = {"room_slug": self.username, "bandwidth": "high"}
+        if self._exclude_edge:
+            # The site's player re-requests with the failing edge excluded so
+            # the API hands out a different edge. Mirror that behavior.
+            data["current_edge"] = self._exclude_edge
+            data["exclude_edge"] = self._exclude_edge
 
         try:
             with Chaturbate._edge_lock:
@@ -164,16 +205,22 @@ class Chaturbate(Bot):
                 Chaturbate._edge_last_call = time.time()
             r = self.session.post("https://chaturbate.com/get_edge_hls_url_ajax/", headers=headers, data=data, timeout=10)
             if r.status_code == 429:
-                status = Status.RATELIMIT
+                status = self._statusFromDossier()
+                if status is None:
+                    status = Status.RATELIMIT
             else:
                 self.lastInfo = r.json()
                 self._url_fetched_at = time.time()
                 status = self._parseStatus(self.lastInfo['room_status'])
                 if status == status.PUBLIC and not self.lastInfo['url']:
                     status = status.RESTRICTED
+                if status != Status.RATELIMIT:
+                    self._exclude_edge = None  # got a fresh URL; clear edge exclusion
         except Exception as e:
             self.logger.warning(f'getStatus request failed: {e}')
-            status = Status.ERROR
+            status = self._statusFromDossier()
+            if status is None:
+                status = Status.ERROR
 
         self.ratelimit = status == Status.RATELIMIT
         return status

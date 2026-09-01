@@ -159,6 +159,11 @@ def getVideoFfmpeg(self, url, filename):
                         # on age >= timeout).
                         if hasattr(self, 'lastInfo') and isinstance(self.lastInfo, dict):
                             self.lastInfo.pop('url', None)
+                        # If the site supports edge exclusion (chaturbate
+                        # does), steer the next getStatus() to a different
+                        # edge instead of bouncing back to the failing one.
+                        if hasattr(self, '_current_edge') and hasattr(self, '_exclude_edge'):
+                            self._exclude_edge = self._current_edge
                         stopping.pls_stop()
                         return
                     time.sleep(1)
