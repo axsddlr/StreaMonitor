@@ -58,11 +58,11 @@ def getVideoFfmpeg(self, url, filename):
 
     if isinstance(url, tuple):
         video_url, audio_url = url
-        cmd.extend(reconnect_opts + HLS_OPTS + ['-i', video_url])
-        cmd.extend(reconnect_opts + HLS_OPTS + ['-i', audio_url])
+        cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024', '-i', video_url])
+        cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024', '-i', audio_url])
         cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0'] + MOVFLAGS)
     else:
-        cmd.extend(reconnect_opts + HLS_OPTS + [
+        cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024',
             '-i', url,
             '-c:a', 'copy',
             '-c:v', 'copy',
