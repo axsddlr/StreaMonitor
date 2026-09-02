@@ -106,6 +106,11 @@ def getVideoFfmpeg(self, url, filename):
         process = None
         try:
             stderr_handle = open(stderr_path, 'w') if DEBUG else None
+            if stderr_handle:
+                # First line of the log records the exact command, so a pasted
+                # log proves which options the *running* image actually used.
+                stderr_handle.write('[streamonitor] argv: ' + subprocess.list2cmdline(cmd) + '\n')
+                stderr_handle.flush()
             stderr = stderr_handle if stderr_handle else subprocess.DEVNULL
             startupinfo = None
             if sys.platform == "win32":
