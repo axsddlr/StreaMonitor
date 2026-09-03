@@ -1,4 +1,5 @@
 import errno
+import io
 import os
 import subprocess
 import sys
@@ -32,7 +33,12 @@ WATCHDOG_403_THRESHOLD = 3
 def getVideoFfmpeg(self, url, filename):
     cmd = [
         FFMPEG_PATH,
-        '-user_agent', self.headers['User-Agent']
+        '-user_agent', self.headers['User-Agent'],
+        # Log only warnings/errors: at the default level CB's LLHLS playlists
+        # produce hundreds of "Skip ('#EXT-X-PART:...')" parse notices and
+        # segment-open lines per minute, drowning out the messages we
+        # actually diagnose from.
+        '-loglevel', 'warning',
     ]
 
     cookie_file = None
@@ -104,14 +110,17 @@ def getVideoFfmpeg(self, url, filename):
         nonlocal error
         stderr_handle = None
         process = None
+        filter_thread = None
         try:
-            stderr_handle = open(stderr_path, 'w') if DEBUG else None
+            stderr_handle = open(stderr_path, 'w', buffering=1) if DEBUG else None
             if stderr_handle:
                 # First line of the log records the exact command, so a pasted
                 # log proves which options the *running* image actually used.
                 stderr_handle.write('[streamonitor] argv: ' + subprocess.list2cmdline(cmd) + '\n')
                 stderr_handle.flush()
-            stderr = stderr_handle if stderr_handle else subprocess.DEVNULL
+            # Pipe stderr through a filter thread (below) that drops
+            # known-benign noise before it reaches the log file.
+            stderr = subprocess.PIPE if DEBUG else subprocess.DEVNULL
             startupinfo = None
             if sys.platform == "win32":
                 startupinfo = subprocess.STARTUPINFO()
@@ -132,6 +141,33 @@ def getVideoFfmpeg(self, url, filename):
             if stderr_handle:
                 stderr_handle.close()
             return
+
+        # CB's LLHLS wraps every CMAF chunk in its own moov box, so ffmpeg
+        # logs this notice once per segment part. It is harmless and the last
+        # thing spamming the log; drop it (the watchdog still sees every
+        # warning and error line).
+        _NOISY = 'Found duplicated MOOV Atom. Skipped it'
+        if stderr_handle and process.stderr:
+            def filter_stderr():
+                try:
+                    for line in io.TextIOWrapper(process.stderr, encoding='utf-8', errors='replace'):
+                        if _NOISY not in line:
+                            stderr_handle.write(line)
+                except Exception:
+                    # If writing the log fails (e.g. disk full), keep draining
+                    # the pipe so ffmpeg never blocks on stderr output.
+                    try:
+                        while process.stderr.read(65536):
+                            pass
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        stderr_handle.flush()
+                    except Exception:
+                        pass
+            filter_thread = Thread(target=filter_stderr, daemon=True)
+            filter_thread.start()
 
         def watch_stderr():
             """Kill ffmpeg early when the CDN starts 403ing (dead session token).
@@ -182,7 +218,12 @@ def getVideoFfmpeg(self, url, filename):
             while process.poll() is None:
                 if stopping.stop:
                     try:
-                        process.communicate(b'q', timeout=30)
+                        try:
+                            process.stdin.write(b'q')
+                            process.stdin.flush()
+                        except (BrokenPipeError, OSError):
+                            pass
+                        process.wait(timeout=30)
                     except subprocess.TimeoutExpired:
                         process.terminate()
                         try:
@@ -200,6 +241,8 @@ def getVideoFfmpeg(self, url, filename):
                 self.logger.error('The process exited with an error. Return code: ' + str(process.returncode))
                 error = True
         finally:
+            if filter_thread is not None:
+                filter_thread.join(timeout=5)
             if stderr_handle:
                 stderr_handle.close()
             if not error and DEBUG and os.path.exists(stderr_path):
