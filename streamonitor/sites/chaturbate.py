@@ -15,7 +15,13 @@ class Chaturbate(Bot):
     site = 'Chaturbate'
     siteslug = 'CB'
     bulk_update = True
-    video_url_timeout = 20 * 60
+    # No recording cap. The 20-minute rotation this used to enforce
+    # (restarting ffmpeg to pick up a fresh CDN URL before the session
+    # expired) is obsolete now: the 403 watchdog, edge failover and
+    # single-use JWE token handling recover dead sessions on demand. A cap
+    # here only splits long shows into 20-minute files. None == one file per
+    # show, like every other site.
+    video_url_timeout = None
 
     EDGE_MIN_INTERVAL = 1.0
     _edge_lock = threading.Lock()
@@ -67,7 +73,7 @@ class Chaturbate(Bot):
     def getVideoUrl(self):
         if self.bulk_update:
             url_age = time.time() - self._url_fetched_at
-            if not self.lastInfo.get('url') or url_age >= self.video_url_timeout:
+            if not self.lastInfo.get('url') or (self.video_url_timeout and url_age >= self.video_url_timeout):
                 self.getStatus()
         url = self.lastInfo.get('url')
         if not url:
