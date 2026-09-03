@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import os
+import re
 import subprocess
 import traceback
 from enum import Enum
@@ -443,17 +444,23 @@ class Bot(Thread):
             pass
 
     def _recover_interrupted_recording(self):
-        if not self.video_url_timeout:
-            return
-        if not os.path.exists(self._parts_manifest):
-            return
+        # Always recover. Parts recorded by the old 20-minute Chaturbate
+        # rotation carry a .parts.txt manifest; merge them automatically at
+        # startup (e.g. right after updating the image) instead of asking
+        # the user to concatenate files by hand. If the manifest is missing
+        # (the old code cleared it even on merge failure), fall back to a
+        # filename-based scan for consecutive split parts.
         try:
-            with open(self._parts_manifest, 'r', encoding='utf-8') as f:
-                parts = [line.strip() for line in f if line.strip()]
-            if parts:
-                self.log(f'Recovering {len(parts)} recording parts from an interrupted session')
-                self.record_parts = parts
-                self._merge_record_parts()
+            if os.path.exists(self._parts_manifest):
+                with open(self._parts_manifest, 'r', encoding='utf-8') as f:
+                    parts = [line.strip() for line in f if line.strip()]
+                if parts:
+                    self.log(f'Recovering {len(parts)} recording parts from an interrupted session')
+                    self._merge_parts(parts, clear_manifest=True)
+                else:
+                    self._clear_parts_manifest()
+            else:
+                self._merge_orphaned_parts()
         except Exception as e:
             self.logger.warning(f'Failed to recover interrupted recording: {e}')
 
@@ -463,6 +470,9 @@ class Bot(Thread):
         if len(parts) <= 1:
             self._clear_parts_manifest()
             return
+        self._merge_parts(parts, clear_manifest=True)
+
+    def _merge_parts(self, parts, clear_manifest):
         final = parts[0]
         tmp = final + '.tmp'
         listfile = final + '.concat.txt'
@@ -472,12 +482,12 @@ class Bot(Thread):
                 for p in parts:
                     f.write("file '" + p.replace("'", "'\\''") + "'\n")
             self.log(f'Merging {len(parts)} recording parts into a single file')
-            subprocess.run(
+            proc = subprocess.run(
                 [FFMPEG_PATH, '-y', '-hide_banner', '-loglevel', 'error',
                  '-f', 'concat', '-safe', '0', '-i', listfile,
                  '-c', 'copy'] + movflags + [tmp],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            if proc.returncode == 0 and os.path.exists(tmp) and os.path.getsize(tmp) > 0:
                 os.replace(tmp, final)
                 for p in parts[1:]:
                     try:
@@ -485,9 +495,24 @@ class Bot(Thread):
                     except OSError:
                         pass
                 self.log('Recording saved to ' + final)
+                if clear_manifest:
+                    self._clear_parts_manifest()
             else:
-                self.logger.warning('Merge produced no output, keeping individual parts')
-            self._clear_parts_manifest()
+                # Keep the individual parts on failure so a broken merge can
+                # never destroy the originals; the manifest (if any) stays
+                # too, so the next startup retries automatically.
+                detail = ''
+                if proc.stderr:
+                    detail = proc.stderr.decode('utf-8', errors='replace').strip()
+                    if detail:
+                        detail = ': ' + detail[-400:]
+                self.logger.warning('Merge failed (ffmpeg exit %d), keeping individual parts%s',
+                                    proc.returncode, detail)
+                try:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+                except OSError:
+                    pass
         except Exception as e:
             self.logger.warning(f'Failed to merge recording parts: {e}')
         finally:
@@ -495,6 +520,44 @@ class Bot(Thread):
                 os.remove(listfile)
             except OSError:
                 pass
+
+    def _merge_orphaned_parts(self):
+        """Merge leftover 20-minute rotation parts that have no manifest.
+
+        The old rotation image cleared .parts.txt even when a merge failed,
+        which can leave consecutive split files behind. Detect them by
+        filename timestamp: rotation restarts are a few seconds apart, while
+        a real offline gap lasts at least one status cycle.
+        """
+        try:
+            folder = self.outputFolder
+            if not os.path.isdir(folder):
+                return
+            pattern = re.compile(
+                re.escape(self.username) + r'-(\d{8})-(\d{6})\.' + re.escape(CONTAINER) + r'$')
+            found = []
+            for name in os.listdir(folder):
+                m = pattern.match(name)
+                if not m:
+                    continue
+                try:
+                    ts = datetime.strptime(m.group(1) + m.group(2), '%Y%m%d%H%M%S')
+                except ValueError:
+                    continue
+                found.append((ts, os.path.join(folder, name)))
+            found.sort()
+            run = []
+            for ts, path in found:
+                if run and (ts - run[-1][0]).total_seconds() <= 10:
+                    run.append((ts, path))
+                else:
+                    if len(run) >= 2:
+                        self._merge_parts([p for _, p in run], clear_manifest=False)
+                    run = [(ts, path)]
+            if len(run) >= 2:
+                self._merge_parts([p for _, p in run], clear_manifest=False)
+        except Exception as e:
+            self.logger.warning(f'Orphaned part scan failed: {e}')
 
     @classmethod
     def fromConfig(cls, data):
