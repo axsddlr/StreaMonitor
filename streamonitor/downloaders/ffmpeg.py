@@ -29,6 +29,12 @@ HLS_OPTS = [
 # tolerated; a dead session produces a flood.
 WATCHDOG_403_THRESHOLD = 3
 
+# After a TLS reset on the init-segment keepalive, ffmpeg can re-parse the
+# stream with a stale/garbled init and emit "Invalid NAL unit size" forever
+# while writing nothing. A handful is normal at a segment edge; a burst means
+# the recording is dead and must be restarted.
+WATCHDOG_CORRUPT_THRESHOLD = 20
+
 
 def getVideoFfmpeg(self, url, filename):
     cmd = [
@@ -181,6 +187,7 @@ def getVideoFfmpeg(self, url, filename):
             if not DEBUG:
                 return
             forbidden = 0
+            corrupt = 0
             position = 0
             try:
                 while process.poll() is None and not stopping.stop:
@@ -190,6 +197,7 @@ def getVideoFfmpeg(self, url, filename):
                             chunk = f.read()
                             position = f.tell()
                             forbidden += chunk.count('403 Forbidden')
+                            corrupt += chunk.count('Invalid NAL unit size')
                     except OSError:
                         pass
                     if forbidden >= WATCHDOG_403_THRESHOLD:
@@ -205,6 +213,10 @@ def getVideoFfmpeg(self, url, filename):
                         # edge instead of bouncing back to the failing one.
                         if hasattr(self, '_current_edge') and hasattr(self, '_exclude_edge'):
                             self._exclude_edge = self._current_edge
+                        stopping.pls_stop()
+                        return
+                    if corrupt >= WATCHDOG_CORRUPT_THRESHOLD:
+                        self.logger.warning('ffmpeg is emitting corrupt-stream errors (stale init segment?), restarting recording')
                         stopping.pls_stop()
                         return
                     time.sleep(1)
