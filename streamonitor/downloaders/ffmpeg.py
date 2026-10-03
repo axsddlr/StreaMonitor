@@ -8,7 +8,7 @@ import time
 
 import requests.cookies
 from threading import Thread
-from parameters import DEBUG, SEGMENT_TIME, CONTAINER, FFMPEG_PATH, FFMPEG_READRATE
+from parameters import DEBUG, SEGMENT_TIME, CONTAINER, FFMPEG_PATH, FFMPEG_READRATE, STALL_TIMEOUT
 from streamonitor.utils.cookies import dump_cookies_to_netscape
 
 MOVFLAGS = ['-movflags', '+frag_keyframe+empty_moov'] if CONTAINER == 'mp4' else []
@@ -21,6 +21,11 @@ HLS_OPTS = [
     '-seg_max_retry', '20',
     '-m3u8_hold_counters', '20',
     '-live_start_index', '-1',
+    # A CDN that accepts the connection and then goes silent leaves ffmpeg
+    # blocked in a socket read forever: the retry options above never fire
+    # because nothing errors. 15s bounds every socket read so the fail-fast
+    # paths actually get a chance to run.
+    '-rw_timeout', '15000000',
 ]
 
 # After this many "403 Forbidden" lines in the stderr log the watchdog
@@ -37,6 +42,8 @@ WATCHDOG_CORRUPT_THRESHOLD = 20
 
 
 def getVideoFfmpeg(self, url, filename):
+    stderr_path = filename + '.stderr.log'
+    progress_path = filename + '.progress'
     cmd = [
         FFMPEG_PATH,
         '-user_agent', self.headers['User-Agent'],
@@ -45,6 +52,10 @@ def getVideoFfmpeg(self, url, filename):
         # segment-open lines per minute, drowning out the messages we
         # actually diagnose from.
         '-loglevel', 'warning',
+        # Machine-readable progress. Unlike the stats line it is written at
+        # every log level, so the stall watchdog keeps working while the log
+        # stays quiet.
+        '-progress', progress_path,
     ]
 
     cookie_file = None
@@ -68,12 +79,18 @@ def getVideoFfmpeg(self, url, filename):
         '-reconnect_delay_max', '10',
     ]
 
-    if isinstance(url, tuple):
+    # Sites hand back (video, audio) when the rendition has a separate audio
+    # group, and None for the audio half when it does not. A None used to
+    # reach the argv (and Popen), raising inside the worker thread and making
+    # getVideo() report success for a recording that never started.
+    if isinstance(url, tuple) and url[1]:
         video_url, audio_url = url
         cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024', '-i', video_url])
         cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024', '-i', audio_url])
         cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0'] + MOVFLAGS)
     else:
+        if isinstance(url, tuple):
+            url = url[0]
         cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024',
             '-i', url,
             '-c:a', 'copy',
@@ -104,13 +121,20 @@ def getVideoFfmpeg(self, url, filename):
     class _Stopper:
         def __init__(self):
             self.stop = False
+            # ffmpeg finalises the container when asked to quit, which is
+            # worth waiting for on a normal stop. A failure path (stall, dead
+            # session) has nothing left to write, and ffmpeg can sit in a
+            # playlist-reload sleep without ever reading 'q', so those ask for
+            # a short grace and get terminated instead of wasting the show.
+            self.grace = 30
 
-        def pls_stop(self):
+        def pls_stop(self, grace=None):
+            if grace is not None:
+                self.grace = grace
             self.stop = True
 
     stopping = _Stopper()
     error = False
-    stderr_path = filename + '.stderr.log'
 
     def execute():
         nonlocal error
@@ -136,12 +160,16 @@ def getVideoFfmpeg(self, url, filename):
         except OSError as e:
             if e.errno == errno.ENOENT:
                 self.logger.error('FFMpeg executable not found!')
-                error = True
-                return
             else:
                 self.logger.error("Got OSError, errno: " + str(e.errno))
-                error = True
-                return
+            error = True
+            return
+        except Exception as e:
+            # Anything else (a bad option, a None that slipped into argv) must
+            # not look like a completed recording.
+            self.logger.error('Failed to start ffmpeg: ' + str(e))
+            error = True
+            return
 
         if process is None:
             if stderr_handle:
@@ -155,10 +183,14 @@ def getVideoFfmpeg(self, url, filename):
         _NOISY = 'Found duplicated MOOV Atom. Skipped it'
         if stderr_handle and process.stderr:
             def filter_stderr():
+                wrapper = io.TextIOWrapper(process.stderr, encoding='utf-8', errors='replace')
                 try:
-                    for line in io.TextIOWrapper(process.stderr, encoding='utf-8', errors='replace'):
+                    for line in wrapper:
                         if _NOISY not in line:
-                            stderr_handle.write(line)
+                            # ffmpeg's own output carries no timestamps, so a
+                            # silent multi-hour stall is invisible after the
+                            # fact; stamp every line as it arrives.
+                            stderr_handle.write(time.strftime('%Y-%m-%d %H:%M:%S ') + line)
                 except Exception:
                     # If writing the log fails (e.g. disk full), keep draining
                     # the pipe so ffmpeg never blocks on stderr output.
@@ -169,28 +201,35 @@ def getVideoFfmpeg(self, url, filename):
                         pass
                 finally:
                     try:
+                        wrapper.close()
+                    except Exception:
+                        pass
+                    try:
                         stderr_handle.flush()
                     except Exception:
                         pass
             filter_thread = Thread(target=filter_stderr, daemon=True)
             filter_thread.start()
 
-        def watch_stderr():
-            """Kill ffmpeg early when the CDN starts 403ing (dead session token).
+        def watch_output():
+            """Kill ffmpeg when the CDN session dies or output stops.
 
-            The HLS retry options above already bound ffmpeg's retries, but a
-            dead session still spends minutes retrying before the bot can
-            refresh the token. Watching the stderr log for a flood of 403s
-            lets us fail fast and hand control back to the bot for a fresh
-            token immediately.
+            The 403/corrupt counters only see errors ffmpeg actually writes.
+            A stream that simply goes quiet (socket alive, no new segments)
+            writes nothing at all, which is the failure that used to record
+            nothing for hours while looking healthy. The -progress file is
+            the signal for that case and needs no DEBUG.
             """
-            if not DEBUG:
-                return
+            nonlocal error
             forbidden = 0
             corrupt = 0
             position = 0
-            try:
-                while process.poll() is None and not stopping.stop:
+            last_us = None
+            last_progress = time.monotonic()
+            progress_readable = False
+            progress_disabled = False
+            while process.poll() is None and not stopping.stop:
+                if DEBUG:
                     try:
                         with open(stderr_path, 'r', errors='replace') as f:
                             f.seek(position)
@@ -213,18 +252,48 @@ def getVideoFfmpeg(self, url, filename):
                         # edge instead of bouncing back to the failing one.
                         if hasattr(self, '_current_edge') and hasattr(self, '_exclude_edge'):
                             self._exclude_edge = self._current_edge
-                        stopping.pls_stop()
+                        stopping.pls_stop(grace=5)
                         return
                     if corrupt >= WATCHDOG_CORRUPT_THRESHOLD:
                         self.logger.warning('ffmpeg is emitting corrupt-stream errors (stale init segment?), restarting recording')
-                        stopping.pls_stop()
+                        stopping.pls_stop(grace=5)
                         return
-                    time.sleep(1)
-            except Exception:
-                pass
+                if not progress_disabled:
+                    try:
+                        us = None
+                        with open(progress_path, 'r', errors='replace') as f:
+                            for line in f:
+                                if line.startswith('out_time_us='):
+                                    try:
+                                        us = int(line.split('=', 1)[1])
+                                    except ValueError:
+                                        pass
+                        progress_readable = True
+                        if us is not None and us != last_us:
+                            last_us = us
+                            last_progress = time.monotonic()
+                    except OSError:
+                        if progress_readable:
+                            # Can't measure progress any more: stop judging
+                            # rather than risk killing a healthy recording.
+                            progress_disabled = True
+                            progress_readable = False
+                            self.logger.warning('Cannot read ffmpeg progress file, stall detection disabled for this recording')
+                if progress_readable and time.monotonic() - last_progress > STALL_TIMEOUT:
+                    self.logger.warning(
+                        'ffmpeg made no output progress for %ds (stalled stream?), restarting the recording', STALL_TIMEOUT)
+                    if hasattr(self, 'lastInfo') and isinstance(self.lastInfo, dict):
+                        self.lastInfo.pop('url', None)
+                    if hasattr(self, '_current_edge') and hasattr(self, '_exclude_edge'):
+                        self._exclude_edge = self._current_edge
+                    # Take the bot's error path: keep the log/progress files
+                    # as evidence and let it refetch a fresh session token.
+                    error = True
+                    stopping.pls_stop(grace=5)
+                    return
+                time.sleep(1)
 
-        if DEBUG:
-            Thread(target=watch_stderr, daemon=True).start()
+        Thread(target=watch_output, daemon=True).start()
 
         try:
             while process.poll() is None:
@@ -235,7 +304,7 @@ def getVideoFfmpeg(self, url, filename):
                             process.stdin.flush()
                         except (BrokenPipeError, OSError):
                             pass
-                        process.wait(timeout=30)
+                        process.wait(timeout=stopping.grace)
                     except subprocess.TimeoutExpired:
                         process.terminate()
                         try:
@@ -255,6 +324,11 @@ def getVideoFfmpeg(self, url, filename):
         finally:
             if filter_thread is not None:
                 filter_thread.join(timeout=5)
+            if process.stdin:
+                try:
+                    process.stdin.close()
+                except OSError:
+                    pass
             if stderr_handle:
                 stderr_handle.close()
             if not error and DEBUG and os.path.exists(stderr_path):
@@ -262,6 +336,13 @@ def getVideoFfmpeg(self, url, filename):
                 # shouldn't litter the downloads folder with .stderr.log files.
                 try:
                     os.remove(stderr_path)
+                except OSError:
+                    pass
+            if not error and os.path.exists(progress_path):
+                # Kept on failure: its last out_time_us=/speed= is the only
+                # record of where a stalled recording stopped making progress.
+                try:
+                    os.remove(progress_path)
                 except OSError:
                     pass
 

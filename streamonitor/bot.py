@@ -16,7 +16,7 @@ import requests.cookies
 
 from streamonitor.enums import Status, COUNTRIES, Gender, GENDER_DATA
 import streamonitor.log as log
-from parameters import DOWNLOADS_DIR, DEBUG, WANTED_RESOLUTION, WANTED_RESOLUTION_PREFERENCE, CONTAINER, HTTP_USER_AGENT, FFMPEG_PATH
+from parameters import DOWNLOADS_DIR, DEBUG, WANTED_RESOLUTION, WANTED_RESOLUTION_PREFERENCE, CONTAINER, HTTP_USER_AGENT, FFMPEG_PATH, SEGMENT_TIME
 from streamonitor.downloaders.ffmpeg import getVideoFfmpeg
 from streamonitor.models import VideoData
 
@@ -35,6 +35,10 @@ class Bot(Thread):
     sleep_on_offline = 5
     sleep_on_long_offline = 300
     sleep_on_error = 20
+    # A recording that died (dead session token, stall) is retried after this
+    # short pause: getVideoUrl() already fetches a fresh token, so sitting out
+    # the full status-error backoff just loses more of the show.
+    sleep_on_recording_error = 5
     sleep_on_ratelimit = 180
     long_offline_timeout = 600
     video_url_timeout = None
@@ -246,7 +250,11 @@ class Bot(Thread):
                             self.log('Started downloading show')
                             self.recording = True
                             file = self.genOutFilename()
-                            if self.video_url_timeout:
+                            # Track every part so restarts merge into one file
+                            # instead of leaving fragments behind. Skipped in
+                            # segment mode: there the muxer writes its own names
+                            # from a template, so `file` never exists on disk.
+                            if SEGMENT_TIME is None:
                                 self.record_parts.append(file)
                                 self._write_parts_manifest()
                             try:
@@ -256,20 +264,24 @@ class Bot(Thread):
                                 ret = False
                             if not ret:
                                 self.log('Recording ended with error')
-                                if self.video_url_timeout and self.record_parts and self.record_parts[-1] == file:
-                                    self.record_parts.pop()
-                                    self._write_parts_manifest()
-                                    # Remove the partial file from the failed
-                                    # part: it's not in the merge list and a
-                                    # dead-session error can leave a huge,
-                                    # unplayable fragment behind.
-                                    try:
-                                        os.remove(file)
-                                    except OSError:
-                                        pass
+                                if SEGMENT_TIME is None and self.record_parts and self.record_parts[-1] == file:
+                                    if os.path.exists(file) and os.path.getsize(file) > 0:
+                                        # Keep what was recorded before the
+                                        # error: the merge is lossless and
+                                        # dropping the part throws away real
+                                        # show minutes. Only an empty part is
+                                        # removed.
+                                        self.log(f'Keeping partial part ({os.path.getsize(file)} bytes) for the final merge')
+                                    else:
+                                        self.record_parts.pop()
+                                        self._write_parts_manifest()
+                                        try:
+                                            os.remove(file)
+                                        except OSError:
+                                            pass
                                 self.sc = Status.ERROR
                                 self.log(self.status())
-                                self._sleep(self.sleep_on_error)
+                                self._sleep(self.sleep_on_recording_error)
                                 continue
                             self.recording = False
                             self.log('Recording ended')
@@ -473,8 +485,27 @@ class Bot(Thread):
         self._merge_parts(parts, clear_manifest=True)
 
     def _merge_parts(self, parts, clear_manifest):
+        # A part can be missing or empty when ffmpeg was killed before the
+        # muxer wrote anything. One of those used to abort the whole concat
+        # and leave every fragment unmerged, so drop them first.
+        usable = []
+        for p in parts:
+            if os.path.exists(p) and os.path.getsize(p) > 0:
+                usable.append(p)
+            else:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        parts = usable
+        if not parts:
+            if clear_manifest:
+                self._clear_parts_manifest()
+            return
         final = parts[0]
-        tmp = final + '.tmp'
+        # Keep the container extension on the temp name: ffmpeg infers the
+        # muxer from it, and a bare '.tmp' made every merge fail.
+        tmp = final + '.tmp.' + CONTAINER
         listfile = final + '.concat.txt'
         movflags = ['-movflags', '+frag_keyframe+empty_moov'] if CONTAINER == 'mp4' else []
         try:

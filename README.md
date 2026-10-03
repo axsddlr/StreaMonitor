@@ -167,6 +167,7 @@ All settings can be set via environment variables or a `.env` file in the projec
 | `STRMNTR_PORT` | `5000` | Web server port |
 | `STRMNTR_PASSWORD` | `admin` | Web UI password (set to empty string to disable auth) |
 | `STRMNTR_DEBUG` | `False` | Enable verbose logging and ffmpeg stderr output |
+| `STRMNTR_STALL_TIMEOUT` | `90` | Seconds without output progress before ffmpeg is restarted (stalled stream) |
 | `STRMNTR_USER_AGENT` | *(Firefox UA string)* | HTTP User-Agent used by most sites (CamSoda ignores this) |
 
 ## StripChat Setup

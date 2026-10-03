@@ -16,6 +16,8 @@ if COOKIES_DIR is None:
 MIN_FREE_DISK_PERCENT = env.float("STRMNTR_MIN_FREE_SPACE", 5.0)  # in %
 MIN_FREE_DISK_GB = env.float("STRMNTR_MIN_FREE_SPACE_GB", 0)  # in GB, 0 = disabled
 DEBUG = env.bool("STRMNTR_DEBUG", False)
+# Seconds without output progress before ffmpeg is restarted (stalled stream).
+STALL_TIMEOUT = env.int("STRMNTR_STALL_TIMEOUT", 90)
 
 # The camsoda bot ignores this setting in favor of a chrome useragent generated with the fake-useragent library
 HTTP_USER_AGENT = env.str("STRMNTR_USER_AGENT", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0")
