@@ -87,7 +87,32 @@ def getVideoFfmpeg(self, url, filename):
         video_url, audio_url = url
         cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024', '-i', video_url])
         cmd.extend(reconnect_opts + HLS_OPTS + ['-thread_queue_size', '1024', '-i', audio_url])
-        cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0'] + MOVFLAGS)
+        # -copyts is what keeps audio and video in sync here.
+        #
+        # The two inputs are *separate live renditions*: each one is opened at
+        # its own last segment, and their playlists are not at the same live
+        # position (Chaturbate's video playlist reports the audio playlist one
+        # media sequence ahead in its own EXT-X-RENDITION-REPORT line). Both
+        # renditions share the origin's timeline, so their timestamps already
+        # express the real offset between the two joins -- but without
+        # -copyts ffmpeg normalizes *every input's* start to zero
+        # independently, throwing that offset away. The audio content then
+        # plays against video from a different point in time: a constant
+        # offset (about one segment, ~2s on Chaturbate) for the whole
+        # recording. Measured with a synthetic two-rendition stream whose
+        # audio rendition joins 4s late: 4.00s of desync without the flag,
+        # 0.03s with it.
+        #
+        # -avoid_negative_ts make_zero then shifts the whole file (both
+        # streams by the same amount) so it still starts at 0 instead of at
+        # the stream's absolute timestamp, which on a long-running show is
+        # hours into its timeline.
+        #
+        # -start_at_zero must NOT be added: it re-normalizes each input
+        # independently and reproduces the same offset (measured: back to
+        # 4.00s out of sync).
+        cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-map', '0:v:0', '-map', '1:a:0',
+                    '-copyts', '-avoid_negative_ts', 'make_zero'] + MOVFLAGS)
     else:
         if isinstance(url, tuple):
             url = url[0]
